@@ -6,8 +6,8 @@ int main()
 {
     const int n = 1000;
     const int min = 1;
-    const int max = 1;
-    const string outputPath = "tests/same-number.in";
+    const int max = 1000000;
+    const string outputPath = "tests/diff-numbers.in";
 
     random_device rd;
     mt19937 gen(rd());

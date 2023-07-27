@@ -6,8 +6,11 @@
 #include <deque>
 #include <filesystem>
 #include <chrono>
-namespace fs = std::filesystem;
+#include <algorithm>
+#include <bitset>
+
 using namespace std;
+namespace fs = filesystem;
 
 struct Node
 {
@@ -43,7 +46,8 @@ void enqueue(MinHeap *heap, Node *node)
 {
     if (heap->size >= heap->capacity)
     {
-        throw "Heap reached maximum capacity";
+        cerr << "Heap reached maximum capacity\n";
+        return;
     }
     ++heap->size;
     unsigned i = heap->size;
@@ -104,6 +108,7 @@ Node *createNode(int value, unsigned freq)
     node->left = node->right = NULL;
     return node;
 }
+
 void generateCode(Node *cur, string path, unordered_map<int, string> &code)
 {
     if (cur->left)
@@ -123,7 +128,8 @@ void generateCode(Node *cur, string path, unordered_map<int, string> &code)
 unordered_map<int, string> getHuffmanCode(Node *huffmanTree)
 {
     unordered_map<int, string> code;
-    if (!huffmanTree->left && !huffmanTree->right) {
+    if (!huffmanTree->left && !huffmanTree->right)
+    {
         // Only one unique character
         code[huffmanTree->value] = "0";
         return code;
@@ -131,9 +137,11 @@ unordered_map<int, string> getHuffmanCode(Node *huffmanTree)
     generateCode(huffmanTree, "", code);
     return code;
 }
+
 Node *generateHuffmanTree(const unordered_map<int, unsigned> &freqMap)
 {
-    if (freqMap.size() == 0) {
+    if (freqMap.size() == 0)
+    {
         cerr << "freqMap has size 0\n";
         return NULL;
     }
@@ -144,7 +152,7 @@ Node *generateHuffmanTree(const unordered_map<int, unsigned> &freqMap)
     {
         enqueue(heap, createNode(i.first, i.second));
     }
-    
+
     for (int i = 0; i < freqMap.size() - 1; i++)
     {
         Node *first = dequeue(heap);
@@ -192,20 +200,37 @@ unordered_map<string, int> createReverseLookup(const unordered_map<int, string> 
     return reverseCode;
 }
 
-vector<int> decode(const string &str, const unordered_map<int, string> &code)
+vector<int> decode(const string &str, Node *huffmanTree)
 {
-    unordered_map<string, int> reverseCode = createReverseLookup(code);
     vector<int> result;
-    string buffer;
+
+    if (!huffmanTree->left && !huffmanTree->right)
+    {
+        // Only one unique character
+        for (const char &c : str)
+        {
+            result.push_back(huffmanTree->value);
+        }
+        return result;
+    }
+
+    Node *root = huffmanTree;
+    Node *node = root;
 
     for (const char &c : str)
     {
-        buffer.push_back(c);
-        auto it = reverseCode.find(buffer);
-        if (it != reverseCode.end())
+        if (c == '0')
         {
-            result.push_back(it->second);
-            buffer.clear();
+            node = node->left;
+        }
+        else
+        {
+            node = node->right;
+        }
+        if (!node->left && !node->right)
+        {
+            result.push_back(node->value);
+            node = root;
         }
     }
 
@@ -273,10 +298,67 @@ Node *deserialize(const string &serializedTree, int &i)
     }
     return NULL;
 }
+
 Node *deserializeTree(const string &serializedTree)
 {
     int i = 0;
     return deserialize(serializedTree, i);
+}
+
+void writeBitsToFile(ofstream &out, const string &bits)
+{
+    char byte = 0;
+    int pos = 0;
+    for (const char &c : bits)
+    {
+        bool b = c == '1';
+        if (b)
+        {
+            byte |= (1 << pos);
+        }
+        pos++;
+        if (pos == 8)
+        {
+            out.write(&byte, sizeof(byte));
+            byte = 0;
+            pos = 0;
+        }
+    }
+    if (pos > 0)
+    {
+        out.write(&byte, sizeof(byte));
+    }
+}
+
+string readBitsIntoString(ifstream &file, unsigned long long bits)
+{
+    char byte;
+    stringstream stream;
+    while (bits >= 8)
+    {
+        file.read(&byte, sizeof(byte));
+
+        // Add this to the string
+        for (int pos = 0; pos < 8; ++pos)
+        {
+            bool b = byte & (1 << pos);
+            stream << (b ? '1' : '0');
+        }
+
+        bits -= 8;
+    }
+    if (bits > 0)
+    {
+        file.read(&byte, sizeof(byte));
+
+        // Add this to the string
+        for (int pos = 0; pos < bits; ++pos)
+        {
+            bool b = byte & (1 << pos);
+            stream << (b ? '1' : '0');
+        }
+    }
+    return stream.str();
 }
 
 void compressFile(const string &inputPath, const string &outputPath)
@@ -310,49 +392,8 @@ void compressFile(const string &inputPath, const string &outputPath)
     out.write(reinterpret_cast<char *>(&bufferSize), sizeof(bufferSize));
     out.write(reinterpret_cast<char *>(&encodedSize), sizeof(encodedSize));
 
-    char byte = 0;
-    int pos = 0;
-    for (const char &c : buffer)
-    {
-        bool b = c == '1';
-        if (b)
-        {
-            byte |= (1 << pos);
-        }
-        pos++;
-        if (pos == 8)
-        {
-            out.write(&byte, sizeof(byte));
-            byte = 0;
-            pos = 0;
-        }
-    }
-    if (pos > 0)
-    {
-        out.write(&byte, sizeof(byte));
-    }
-
-    byte = 0;
-    pos = 0;
-    for (const char &c : encoded)
-    {
-        bool b = c == '1';
-        if (b)
-        {
-            byte |= (1 << pos);
-        }
-        pos++;
-        if (pos == 8)
-        {
-            out.write(&byte, sizeof(byte));
-            byte = 0;
-            pos = 0;
-        }
-    }
-    if (pos > 0)
-    {
-        out.write(&byte, sizeof(byte));
-    }
+    writeBitsToFile(out, buffer);
+    writeBitsToFile(out, encoded);
     out.close();
     // cout << "Compression successful.\n";
     // cout << "Original size: " << inputInts.size() * 4 << " bytes\n";
@@ -363,9 +404,6 @@ void compressFile(const string &inputPath, const string &outputPath)
 void decompressFile(const string &inputPath, const string &outputPath)
 {
     auto startTotal = chrono::high_resolution_clock::now();
-
-    auto start = chrono::high_resolution_clock::now();
-
     ifstream compressed(inputPath, ios::binary);
 
     unsigned bufferSize;
@@ -374,118 +412,13 @@ void decompressFile(const string &inputPath, const string &outputPath)
     compressed.read(reinterpret_cast<char *>(&bufferSize), sizeof(bufferSize));
     compressed.read(reinterpret_cast<char *>(&encodedSize), sizeof(encodedSize));
 
-    auto end = chrono::high_resolution_clock::now();
-    auto duration = chrono::duration_cast<chrono::microseconds>(end - start);
-    cout << "Reading buffer and encoded size time: " << duration.count() << " microseconds.\n";
+    string serializedTree = readBitsIntoString(compressed, bufferSize);
+    string encodedData = readBitsIntoString(compressed, encodedSize);
 
-    start = chrono::high_resolution_clock::now();
-
-    char byte;
-    stringstream bufferStream, encodedStream;
-    while (bufferSize >= 8)
-    {
-        compressed.read(&byte, sizeof(byte));
-
-        // Add this to the string
-        for (int pos = 0; pos < 8; ++pos)
-        {
-            bool b = byte & (1 << pos);
-            bufferStream << (b ? '1' : '0');
-        }
-
-        bufferSize -= 8;
-    }
-
-    end = chrono::high_resolution_clock::now();
-    duration = chrono::duration_cast<chrono::microseconds>(end - start);
-    cout << "Reading buffer stream time: " << duration.count() << " microseconds.\n";
-
-    start = chrono::high_resolution_clock::now();
-
-    if (bufferSize > 0)
-    {
-        compressed.read(&byte, sizeof(byte));
-
-        // Add this to the string
-        for (int pos = 0; pos < bufferSize; ++pos)
-        {
-            bool b = byte & (1 << pos);
-            bufferStream << (b ? '1' : '0');
-        }
-    }
-    string serializedTree = bufferStream.str();
-
-    end = chrono::high_resolution_clock::now();
-    duration = chrono::duration_cast<chrono::microseconds>(end - start);
-    cout << "Reading remaining buffer stream time: " << duration.count() << " microseconds.\n";
-
-    start = chrono::high_resolution_clock::now();
-
-    // Read the encoded string
-    while (encodedSize >= 8)
-    {
-        compressed.read(&byte, sizeof(byte));
-
-        // Add this to the string
-        for (int pos = 0; pos < 8; ++pos)
-        {
-            bool b = byte & (1 << pos);
-            encodedStream << (b ? '1' : '0');
-        }
-
-        encodedSize -= 8;
-    }
-
-    end = chrono::high_resolution_clock::now();
-    duration = chrono::duration_cast<chrono::microseconds>(end - start);
-    cout << "Reading encoded string time: " << duration.count() << " microseconds.\n";
-
-    start = chrono::high_resolution_clock::now();
-
-    if (encodedSize > 0)
-    {
-        compressed.read(&byte, sizeof(byte));
-
-        // Add this to the string
-        for (int pos = 0; pos < encodedSize; ++pos)
-        {
-            bool b = byte & (1 << pos);
-            encodedStream << (b ? '1' : '0');
-        }
-    }
-    string encodedData = encodedStream.str();
     compressed.close();
 
-    end = chrono::high_resolution_clock::now();
-    duration = chrono::duration_cast<chrono::microseconds>(end - start);
-    cout << "Reading remaining encoded string and closing file time: " << duration.count() << " microseconds.\n";
-
-    start = chrono::high_resolution_clock::now();
-
     Node *deserializedTree = deserializeTree(serializedTree);
-
-    end = chrono::high_resolution_clock::now();
-    duration = chrono::duration_cast<chrono::microseconds>(end - start);
-    cout << "Deserializing tree time: " << duration.count() << " microseconds.\n";
-
-    start = chrono::high_resolution_clock::now();
-
-    unordered_map<int, string> deserializedCode = getHuffmanCode(deserializedTree);
-
-    end = chrono::high_resolution_clock::now();
-    duration = chrono::duration_cast<chrono::microseconds>(end - start);
-    cout << "Getting Huffman code time: " << duration.count() << " microseconds.\n";
-
-    start = chrono::high_resolution_clock::now();
-
-    vector<int> decodedInts = decode(encodedData, deserializedCode);
-
-    end = chrono::high_resolution_clock::now();
-    duration = chrono::duration_cast<chrono::microseconds>(end - start);
-    cout << "Decoding time: " << duration.count() << " microseconds.\n";
-
-    start = chrono::high_resolution_clock::now();
-
+    vector<int> decodedInts = decode(encodedData, deserializedTree);
     ofstream decodedFile(outputPath);
     if (!decodedFile)
     {
@@ -497,14 +430,9 @@ void decompressFile(const string &inputPath, const string &outputPath)
         decodedFile.write(reinterpret_cast<char *>(&i), sizeof(i));
     }
     decodedFile.close();
-
-    end = chrono::high_resolution_clock::now();
-    duration = chrono::duration_cast<chrono::microseconds>(end - start);
-    cout << "Writing to file time: " << duration.count() << " microseconds.\n";
-
     auto endTotal = chrono::high_resolution_clock::now();
     auto durationTotal = chrono::duration_cast<chrono::microseconds>(endTotal - startTotal);
-    cout << "Total execution time: " << durationTotal.count() << " microseconds.\n";
+    // cout << "Decoding time: " << durationTotal.count() << " microseconds.\n";
 }
 
 bool filesAreSame(const string &a, const string &b)
@@ -526,6 +454,7 @@ bool filesAreSame(const string &a, const string &b)
 
     return equal(begin1, istreambuf_iterator<char>(), begin2);
 }
+
 size_t getFileSize(const string &filePath)
 {
     ifstream in(filePath, ios::ate | ios::binary);
@@ -536,7 +465,7 @@ int main()
 {
     vector<string> testCases;
     const string testDir = "tests";
-    for (const auto& entry : fs::directory_iterator(testDir))
+    for (const auto &entry : fs::directory_iterator(testDir))
     {
         if (entry.path().extension() == ".in")
         {
