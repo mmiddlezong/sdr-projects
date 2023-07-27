@@ -4,10 +4,10 @@
 using namespace std;
 int main()
 {
-    const int n = 10000;
+    const int n = 1000;
     const int min = 1;
-    const int max = 1000;
-    const string outputPath = "input.in";
+    const int max = 1;
+    const string outputPath = "tests/same-number.in";
 
     random_device rd;
     mt19937 gen(rd());
