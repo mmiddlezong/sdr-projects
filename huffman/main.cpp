@@ -286,7 +286,7 @@ void compressFile(const string &inputPath, const string &outputPath)
     string encoded = encode(inputString, code);
     string buffer = serializeTree(tree);
     unsigned int bufferSize = buffer.length(); // Get number of bits needed to store the tree
-    unsigned int encodedSize = encoded.length();
+    unsigned long long encodedSize = encoded.length();
 
     // Write the compressed file
     ofstream out(outputPath, ios::binary);
@@ -349,7 +349,7 @@ void decompressFile(const string &inputPath, const string &outputPath)
     ifstream compressed(inputPath, ios::binary);
 
     unsigned int bufferSize;
-    unsigned int encodedSize;
+    unsigned long long encodedSize;
 
     compressed.read(reinterpret_cast<char *>(&bufferSize), sizeof(bufferSize));
     compressed.read(reinterpret_cast<char *>(&encodedSize), sizeof(encodedSize));
