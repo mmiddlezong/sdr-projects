@@ -2,16 +2,17 @@
 #include <fstream>
 #include <random>
 using namespace std;
+
 int main()
 {
-    const int n = 1000;
-    const int min = 1;
-    const int max = 1000000;
-    const string outputPath = "tests/diff-numbers.in";
+    const int n = 1000000000;
+    const float mean = 100.0f;
+    const float std_dev = 20.0f;
+    const string outputPath = "float-tests/1b-samples.in";
 
     random_device rd;
     mt19937 gen(rd());
-    uniform_int_distribution dis(min, max);
+    normal_distribution<float> dis(mean, std_dev);
 
     ofstream out(outputPath, ios::binary | ios::out);
     if (!out)
@@ -20,15 +21,15 @@ int main()
         return 1;
     }
 
-    srand(static_cast<unsigned>(time(0)));
-
-    int random;
+    float random;
 
     for (int i = 0; i < n; ++i)
     {
         random = dis(gen);
         out.write(reinterpret_cast<const char *>(&random), sizeof(random));
     }
+
+    out.close();
 
     cout << "File generated.\n";
 

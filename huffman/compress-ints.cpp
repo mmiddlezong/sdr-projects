@@ -8,7 +8,6 @@
 #include <chrono>
 #include <algorithm>
 #include <bitset>
-#include <cmath>
 
 using namespace std;
 namespace fs = filesystem;
@@ -32,7 +31,7 @@ MinHeap *createMinHeap(unsigned cap)
     MinHeap *heap = new MinHeap();
     heap->capacity = cap;
     heap->size = 0;
-    heap->arr = new Node *[cap + 1]; // Keep an empty value at 0
+    heap->arr = new Node *[cap];
     return heap;
 }
 
@@ -362,33 +361,20 @@ string readBitsIntoString(ifstream &file, unsigned long long bits)
     return stream.str();
 }
 
-void compressFile(const string &inputPath, const string &outputPath, const float &maxError)
+void compressFile(const string &inputPath, const string &outputPath)
 {
-
     ifstream file(inputPath);
-    vector<float> inputFloats;
+    vector<int> inputInts;
     if (!file)
     {
         cerr << "Failed to open the file.\n";
         return;
     }
-    
-    float curFloat;
-    file.read(reinterpret_cast<char *>(&curFloat), sizeof(curFloat));
-    inputFloats.push_back(curFloat);
-    float minFloat = curFloat;
-    while (file.read(reinterpret_cast<char *>(&curFloat), sizeof(curFloat)))
-    {
-        inputFloats.push_back(curFloat);
-        minFloat = min(minFloat, curFloat);
-    }
 
-    vector<int> inputInts;
-    // Split into buckets of size 2 * maxError
-    for (const auto &f : inputFloats)
+    int curInt;
+    while (file.read(reinterpret_cast<char *>(&curInt), sizeof(curInt)))
     {
-        int bucket = floor((f - minFloat) / (2 * maxError));
-        inputInts.push_back(bucket);
+        inputInts.push_back(curInt);
     }
 
     unordered_map<int, unsigned> freqMap = createFreqMap(inputInts);
@@ -401,25 +387,18 @@ void compressFile(const string &inputPath, const string &outputPath, const float
     unsigned long long encodedSize = encoded.length();
 
     // Write the compressed file
-    ofstream out(outputPath, ios::binary | ios::out);
+    ofstream out(outputPath, ios::binary);
 
-    // 4 + 4 bytes to store maxError and minFloat
-    out.write(reinterpret_cast<const char *>(&maxError), sizeof(maxError));
-    out.write(reinterpret_cast<const char *>(&minFloat), sizeof(maxError));
-
-    // 4 + 8 bytes to store bufferSize and encodedSize
     out.write(reinterpret_cast<char *>(&bufferSize), sizeof(bufferSize));
     out.write(reinterpret_cast<char *>(&encodedSize), sizeof(encodedSize));
 
     writeBitsToFile(out, buffer);
     writeBitsToFile(out, encoded);
-
     out.close();
     // cout << "Compression successful.\n";
     // cout << "Original size: " << inputInts.size() * 4 << " bytes\n";
     // cout << "Buffer size: " << (bufferSize + 7) / 8 << " bytes\n";
     // cout << "Encoded size: " << (encoded.size() + 7) / 8 << " bytes\n";
-
 }
 
 void decompressFile(const string &inputPath, const string &outputPath)
@@ -427,18 +406,9 @@ void decompressFile(const string &inputPath, const string &outputPath)
     auto startTotal = chrono::high_resolution_clock::now();
     ifstream compressed(inputPath, ios::binary);
 
-    if (!compressed.is_open())
-    {
-        cerr << "File could not be opened.\n";
-        return;
-    }
-
-    float maxError, minFloat;
     unsigned bufferSize;
     unsigned long long encodedSize;
 
-    compressed.read(reinterpret_cast<char *>(&maxError), sizeof(maxError));
-    compressed.read(reinterpret_cast<char *>(&minFloat), sizeof(minFloat));
     compressed.read(reinterpret_cast<char *>(&bufferSize), sizeof(bufferSize));
     compressed.read(reinterpret_cast<char *>(&encodedSize), sizeof(encodedSize));
 
@@ -449,7 +419,7 @@ void decompressFile(const string &inputPath, const string &outputPath)
 
     Node *deserializedTree = deserializeTree(serializedTree);
     vector<int> decodedInts = decode(encodedData, deserializedTree);
-    ofstream decodedFile(outputPath, ios::binary | ios::out);
+    ofstream decodedFile(outputPath);
     if (!decodedFile)
     {
         cerr << "Error creating the file.\n";
@@ -457,9 +427,7 @@ void decompressFile(const string &inputPath, const string &outputPath)
     }
     for (int i : decodedInts)
     {
-        // Convert the bucket number back to float
-        const float decodedFloat = minFloat + (i * 2 * maxError) + maxError;
-        decodedFile.write(reinterpret_cast<const char *>(&decodedFloat), sizeof(decodedFloat));
+        decodedFile.write(reinterpret_cast<char *>(&i), sizeof(i));
     }
     decodedFile.close();
     auto endTotal = chrono::high_resolution_clock::now();
@@ -467,80 +435,64 @@ void decompressFile(const string &inputPath, const string &outputPath)
     // cout << "Decoding time: " << durationTotal.count() << " microseconds.\n";
 }
 
+bool filesAreSame(const string &a, const string &b)
+{
+    ifstream file1(a, ios::ate | ios::binary);
+    ifstream file2(b, ios::ate | ios::binary);
+    const streampos fileSize = file1.tellg();
+
+    if (fileSize != file2.tellg())
+    {
+        return false;
+    }
+
+    file1.seekg(0);
+    file2.seekg(0);
+
+    istreambuf_iterator<char> begin1(file1);
+    istreambuf_iterator<char> begin2(file2);
+
+    return equal(begin1, istreambuf_iterator<char>(), begin2);
+}
+
 size_t getFileSize(const string &filePath)
 {
     ifstream in(filePath, ios::ate | ios::binary);
-    if (!in.is_open())
-    {
-        cerr << "File could not be opened.\n";
-        return 0;
-    }
     return in.tellg();
-}
-
-pair<float, float> getMaxAndAvgError(const string &filePath1, const string &filePath2)
-{
-    ifstream file1(filePath1, ios::binary);
-    ifstream file2(filePath2, ios::binary);
-
-    if (!file1.is_open() || !file2.is_open())
-    {
-        throw runtime_error("Files could not be opened.");
-    }
-
-    float v1, v2;
-    float maxError = 0.0f;
-    int count = 0;
-    float sumError = 0.0f;
-    while (file1.read(reinterpret_cast<char *>(&v1), sizeof(v1)))
-    {
-        file2.read(reinterpret_cast<char *>(&v2), sizeof(v2));
-        float curError = abs(v2 - v1);
-        maxError = max(maxError, curError);
-
-        sumError += curError;
-        count++;
-    }
-
-    float avgError = sumError / count;
-
-    file1.close();
-    file2.close();
-
-    return make_pair(maxError, avgError);
 }
 
 int main()
 {
-    float maxError = 0.05f;
     vector<string> testCases;
-    const string testDir = "float-tests";
+    const string testDir = "tests";
     for (const auto &entry : fs::directory_iterator(testDir))
     {
-        if (entry.is_regular_file() && entry.path().extension() == ".in")
+        if (entry.path().extension() == ".in")
         {
             testCases.push_back(entry.path().string());
         }
     }
-    
-    for (string filePath : testCases)
+
+    for (const string &filePath : testCases)
     {
         string compressedPath = filePath + "-compressed.bin";
         string outputPath = filePath + "-decompressed.bin";
 
-        compressFile(filePath, compressedPath, maxError);
+        compressFile(filePath, compressedPath);
         decompressFile(compressedPath, outputPath);
 
         size_t originalSize = getFileSize(filePath);
         size_t compressedSize = getFileSize(compressedPath);
 
-        pair<float, float> maxAndAvgError = getMaxAndAvgError(filePath, outputPath);
-        float curMaxError = maxAndAvgError.first;
-        float curAvgError = maxAndAvgError.second;
+        if (filesAreSame(filePath, outputPath))
+        {
+            cout << "SUCCESS! Compression was lossless: " << filePath << ".\n";
+        }
+        else
+        {
+            cout << "FAIL! Compression was not lossless: " << filePath << ".\n";
+        }
 
-        cout << "Compressed " << filePath << ":\n";
-        cout << "- Max error: " << curMaxError << ".\n";
-        cout << "- Avg error: " << curAvgError << ".\n";
         cout << "- Original file size: " << originalSize << " bytes.\n";
         cout << "- Compressed file size: " << compressedSize << " bytes.\n";
     }
