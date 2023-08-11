@@ -514,7 +514,7 @@ int main()
 {
     float maxError = 0.05f;
     vector<string> testCases;
-    const string testDir = "float-tests";
+    const string testDir = "continuous-tests";
     for (const auto &entry : fs::directory_iterator(testDir))
     {
         if (entry.is_regular_file() && entry.path().extension() == ".in")

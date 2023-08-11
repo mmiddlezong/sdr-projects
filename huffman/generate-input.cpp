@@ -7,12 +7,12 @@ using namespace std;
 
 int main()
 {
-    const int n = 100;
-    const float period = 50.0f;
-    const float amplitude = 500.0f;
-    const float verticalShift = 1000.0f;
-    const float noiseStdDev = 20.0f;
-    const string outputPath = "float-tests/sine-100.in";
+    const int n = 10;
+    const float period = 10.0f;
+    const float amplitude = 10.0f;
+    const float verticalShift = 10.0f;
+    const float noiseStdDev = 0.2f;
+    const string outputPath = "continuous-tests/!sine-10.in";
 
     random_device rd;
     mt19937 gen(rd());

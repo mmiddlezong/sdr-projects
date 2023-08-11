@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <bitset>
 #include <cmath>
+#include <limits>
 
 using namespace std;
 namespace fs = filesystem;
@@ -364,7 +365,6 @@ string readBitsIntoString(ifstream &file, unsigned long long bits)
 
 void compressFile(const string &inputPath, const string &outputPath, const float &maxError)
 {
-
     ifstream file(inputPath);
     vector<float> inputFloats;
     if (!file)
@@ -372,20 +372,33 @@ void compressFile(const string &inputPath, const string &outputPath, const float
         cerr << "Failed to open the file.\n";
         return;
     }
-    
+
     float curFloat;
-    file.read(reinterpret_cast<char *>(&curFloat), sizeof(curFloat));
-    inputFloats.push_back(curFloat);
-    float minFloat = curFloat;
     while (file.read(reinterpret_cast<char *>(&curFloat), sizeof(curFloat)))
     {
         inputFloats.push_back(curFloat);
-        minFloat = min(minFloat, curFloat);
     }
 
-    vector<int> inputInts;
+    if (inputFloats.size() < 2)
+    {
+        cerr << "File contains fewer than two data points.\n";
+        return;
+    }
+
+    vector<float> extrapolatedData; // Size n-2
+    float minFloat = numeric_limits<float>::max();
+    // Extrapolation step
+    for (size_t i = 2; i < inputFloats.size(); ++i)
+    {
+        const float extrapolatedFloat = 2 * inputFloats[i - 1] - inputFloats[i - 2];
+        const float err = inputFloats[i] - extrapolatedFloat;
+        extrapolatedData.push_back(err);
+        minFloat = min(err, minFloat);
+    }
+
+    vector<int> inputInts; // Size n-2
     // Split into buckets of size 2 * maxError
-    for (const auto &f : inputFloats)
+    for (const auto &f : extrapolatedData)
     {
         int bucket = floor((f - minFloat) / (2 * maxError));
         inputInts.push_back(bucket);
@@ -403,6 +416,10 @@ void compressFile(const string &inputPath, const string &outputPath, const float
     // Write the compressed file
     ofstream out(outputPath, ios::binary | ios::out);
 
+    // 4 + 4 bytes to store first two data points
+    out.write(reinterpret_cast<char *>(&inputFloats[0]), sizeof(maxError));
+    out.write(reinterpret_cast<char *>(&inputFloats[1]), sizeof(maxError));
+
     // 4 + 4 bytes to store maxError and minFloat
     out.write(reinterpret_cast<const char *>(&maxError), sizeof(maxError));
     out.write(reinterpret_cast<const char *>(&minFloat), sizeof(maxError));
@@ -419,7 +436,6 @@ void compressFile(const string &inputPath, const string &outputPath, const float
     // cout << "Original size: " << inputInts.size() * 4 << " bytes\n";
     // cout << "Buffer size: " << (bufferSize + 7) / 8 << " bytes\n";
     // cout << "Encoded size: " << (encoded.size() + 7) / 8 << " bytes\n";
-
 }
 
 void decompressFile(const string &inputPath, const string &outputPath)
@@ -434,8 +450,15 @@ void decompressFile(const string &inputPath, const string &outputPath)
     }
 
     float maxError, minFloat;
+    float x0, x1;
+    vector<float> reconstructedData;
     unsigned bufferSize;
     unsigned long long encodedSize;
+
+    compressed.read(reinterpret_cast<char *>(&x0), sizeof(x0));
+    compressed.read(reinterpret_cast<char *>(&x1), sizeof(x1));
+    reconstructedData.push_back(x0);
+    reconstructedData.push_back(x1);
 
     compressed.read(reinterpret_cast<char *>(&maxError), sizeof(maxError));
     compressed.read(reinterpret_cast<char *>(&minFloat), sizeof(minFloat));
@@ -455,11 +478,23 @@ void decompressFile(const string &inputPath, const string &outputPath)
         cerr << "Error creating the file.\n";
         return;
     }
-    for (int i : decodedInts)
+
+    // Reconstruction step
+    for (size_t i = 0; i < decodedInts.size(); ++i)
     {
         // Convert the bucket number back to float
-        const float decodedFloat = minFloat + (i * 2 * maxError) + maxError;
-        decodedFile.write(reinterpret_cast<const char *>(&decodedFloat), sizeof(decodedFloat));
+        const float decodedErr = minFloat + (decodedInts[i] * 2 * maxError) + maxError;
+
+        // Extrapolate the new data point and adjust for error
+        const float extrapolatedFloat = 2 * reconstructedData[i + 1] - reconstructedData[i];
+        const float reconstructedFloat = extrapolatedFloat + decodedErr;
+        reconstructedData.push_back(reconstructedFloat);
+    }
+
+    // Write reconstructed data to file
+    for (const auto &f : reconstructedData)
+    {
+        decodedFile.write(reinterpret_cast<const char *>(&f), sizeof(f));
     }
     decodedFile.close();
     auto endTotal = chrono::high_resolution_clock::now();
@@ -476,6 +511,35 @@ size_t getFileSize(const string &filePath)
         return 0;
     }
     return in.tellg();
+}
+
+void outputErrors(const string &filePath1, const string &filePath2, const string &outputPath)
+{
+    ifstream file1(filePath1, ios::binary);
+    ifstream file2(filePath2, ios::binary);
+
+    if (!file1.is_open() || !file2.is_open())
+    {
+        throw runtime_error("Files could not be opened.");
+    }
+
+    float v1, v2;
+    ofstream out(outputPath);
+    if (!out)
+    {
+        throw runtime_error("Invalid output path.");
+    }
+
+    while (file1.read(reinterpret_cast<char *>(&v1), sizeof(v1)))
+    {
+        file2.read(reinterpret_cast<char *>(&v2), sizeof(v2));
+        float curError = abs(v2 - v1);
+        out << curError << "\n";
+    }
+
+    file1.close();
+    file2.close();
+    out.close();
 }
 
 pair<float, float> getMaxAndAvgError(const string &filePath1, const string &filePath2)
@@ -512,9 +576,9 @@ pair<float, float> getMaxAndAvgError(const string &filePath1, const string &file
 
 int main()
 {
-    float maxError = 0.05f;
+    float maxError = 0.1f;
     vector<string> testCases;
-    const string testDir = "float-tests";
+    const string testDir = "continuous-tests";
     for (const auto &entry : fs::directory_iterator(testDir))
     {
         if (entry.is_regular_file() && entry.path().extension() == ".in")
@@ -522,7 +586,7 @@ int main()
             testCases.push_back(entry.path().string());
         }
     }
-    
+
     for (string filePath : testCases)
     {
         string compressedPath = filePath + "-compressed.bin";
@@ -533,6 +597,8 @@ int main()
 
         size_t originalSize = getFileSize(filePath);
         size_t compressedSize = getFileSize(compressedPath);
+
+        outputErrors(filePath, outputPath, filePath + "-errors.txt");
 
         pair<float, float> maxAndAvgError = getMaxAndAvgError(filePath, outputPath);
         float curMaxError = maxAndAvgError.first;
