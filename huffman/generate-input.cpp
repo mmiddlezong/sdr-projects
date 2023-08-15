@@ -7,12 +7,13 @@ using namespace std;
 
 int main()
 {
-    const int n = 10;
+    const bool print = false;
+    const int n = 10000000;
     const float period = 10.0f;
     const float amplitude = 10.0f;
     const float verticalShift = 10.0f;
     const float noiseStdDev = 0.2f;
-    const string outputPath = "continuous-tests/!sine-10.in";
+    const string outputPath = "continuous-tests/!sine-10m.in";
 
     random_device rd;
     mt19937 gen(rd());
@@ -27,11 +28,11 @@ int main()
 
     float random;
 
-    cout << "Data being generated: ";
+    if (print) cout << "Data being generated: ";
     for (int i = 0; i < n; ++i)
     {
         random = dis(gen) + sin(i * 2 * 3.1415f / period) * amplitude + verticalShift;
-        cout << random << " ";
+        if (print) cout << random << " ";
         out.write(reinterpret_cast<const char *>(&random), sizeof(random));
     }
 
