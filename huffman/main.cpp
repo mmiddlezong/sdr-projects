@@ -379,7 +379,7 @@ void compressFile(const string &inputPath, const string &outputPath, const float
         inputFloats.push_back(curFloat);
     }
 
-    const int n = inputFloats.size();
+    const long long n = inputFloats.size();
     if (n < 2)
     {
         cerr << "File contains fewer than two data points.\n";
