@@ -379,28 +379,34 @@ void compressFile(const string &inputPath, const string &outputPath, const float
         inputFloats.push_back(curFloat);
     }
 
-    if (inputFloats.size() < 2)
+    const int n = inputFloats.size();
+    if (n < 2)
     {
         cerr << "File contains fewer than two data points.\n";
         return;
     }
 
-    vector<float> extrapolatedData; // Size n-2
-    float minFloat = numeric_limits<float>::max();
+    float extrapolateErrors[n - 2]; // Size n-2
+    float lossyData[n];             // Size n
+    lossyData[0] = inputFloats[0];
+    lossyData[1] = inputFloats[1];
     // Extrapolation step
     for (size_t i = 2; i < inputFloats.size(); ++i)
     {
-        const float extrapolatedFloat = 2 * inputFloats[i - 1] - inputFloats[i - 2];
+        const float extrapolatedFloat = 2 * lossyData[i - 1] - lossyData[i - 2];
         const float err = inputFloats[i] - extrapolatedFloat;
-        extrapolatedData.push_back(err);
-        minFloat = min(err, minFloat);
+        extrapolateErrors[i - 2] = err;
+
+        // Figure out what err would quantize to
+        float quantizedErr = round(err / (2 * maxError)) * 2 * maxError;
+        lossyData[i] = extrapolatedFloat + quantizedErr;
     }
 
     vector<int> inputInts; // Size n-2
-    // Split into buckets of size 2 * maxError
-    for (const auto &f : extrapolatedData)
+    // Split into buckets of size 2 * maxError, where bucket 0 is centered at 0
+    for (const auto &err : extrapolateErrors)
     {
-        int bucket = floor((f - minFloat) / (2 * maxError));
+        int bucket = round(err / (2 * maxError));
         inputInts.push_back(bucket);
     }
 
@@ -420,9 +426,8 @@ void compressFile(const string &inputPath, const string &outputPath, const float
     out.write(reinterpret_cast<char *>(&inputFloats[0]), sizeof(maxError));
     out.write(reinterpret_cast<char *>(&inputFloats[1]), sizeof(maxError));
 
-    // 4 + 4 bytes to store maxError and minFloat
+    // 4 bytes to store maxError
     out.write(reinterpret_cast<const char *>(&maxError), sizeof(maxError));
-    out.write(reinterpret_cast<const char *>(&minFloat), sizeof(maxError));
 
     // 4 + 8 bytes to store bufferSize and encodedSize
     out.write(reinterpret_cast<char *>(&bufferSize), sizeof(bufferSize));
@@ -449,7 +454,7 @@ void decompressFile(const string &inputPath, const string &outputPath)
         return;
     }
 
-    float maxError, minFloat;
+    float maxError;
     float x0, x1;
     vector<float> reconstructedData;
     unsigned bufferSize;
@@ -461,7 +466,7 @@ void decompressFile(const string &inputPath, const string &outputPath)
     reconstructedData.push_back(x1);
 
     compressed.read(reinterpret_cast<char *>(&maxError), sizeof(maxError));
-    compressed.read(reinterpret_cast<char *>(&minFloat), sizeof(minFloat));
+
     compressed.read(reinterpret_cast<char *>(&bufferSize), sizeof(bufferSize));
     compressed.read(reinterpret_cast<char *>(&encodedSize), sizeof(encodedSize));
 
@@ -483,7 +488,7 @@ void decompressFile(const string &inputPath, const string &outputPath)
     for (size_t i = 0; i < decodedInts.size(); ++i)
     {
         // Convert the bucket number back to float
-        const float decodedErr = minFloat + (decodedInts[i] * 2 * maxError) + maxError;
+        const float decodedErr = decodedInts[i] * 2 * maxError;
 
         // Extrapolate the new data point and adjust for error
         const float extrapolatedFloat = 2 * reconstructedData[i + 1] - reconstructedData[i];
@@ -576,7 +581,7 @@ pair<float, float> getMaxAndAvgError(const string &filePath1, const string &file
 
 int main()
 {
-    float maxError = 0.1f;
+    float maxError = 0.05f;
     vector<string> testCases;
     const string testDir = "continuous-tests";
     for (const auto &entry : fs::directory_iterator(testDir))
@@ -592,8 +597,15 @@ int main()
         string compressedPath = filePath + "-compressed.bin";
         string outputPath = filePath + "-decompressed.bin";
 
+        auto c0 = chrono::high_resolution_clock::now();
         compressFile(filePath, compressedPath, maxError);
+        auto c1 = chrono::high_resolution_clock::now();
         decompressFile(compressedPath, outputPath);
+        auto c2 = chrono::high_resolution_clock::now();
+
+        // Get time in ms
+        auto compressionTime = chrono::duration_cast<chrono::microseconds>(c1 - c0).count() / 1000.0f;
+        auto decompressionTime = chrono::duration_cast<chrono::microseconds>(c2 - c1).count() / 1000.0f;
 
         size_t originalSize = getFileSize(filePath);
         size_t compressedSize = getFileSize(compressedPath);
@@ -605,10 +617,17 @@ int main()
         float curAvgError = maxAndAvgError.second;
 
         cout << "Compressed " << filePath << ":\n";
-        cout << "- Max error: " << curMaxError << ".\n";
-        cout << "- Avg error: " << curAvgError << ".\n";
-        cout << "- Original file size: " << originalSize << " bytes.\n";
-        cout << "- Compressed file size: " << compressedSize << " bytes.\n";
+        cout << "- Max error: " << curMaxError << "\n";
+        cout << "- Avg error: " << curAvgError << "\n";
+        cout << "- Original file size: " << originalSize << " B\n";
+        cout << "- Compressed file size: " << compressedSize << " B\n";
+        cout << "- Compression..." << "\n";
+        cout << "-   ratio: " << (float) originalSize / compressedSize << "\n";
+        cout << "-   time: " << compressionTime << " ms\n";
+        cout << "-   throughput: " << (float) originalSize / compressionTime << " KB/s\n";
+        cout << "- Decompression..." << "\n";
+        cout << "-   time: " << decompressionTime << " ms\n";
+        cout << "-   throughput: " << (float) originalSize / decompressionTime << " KB/s\n";
     }
 
     return 0;
