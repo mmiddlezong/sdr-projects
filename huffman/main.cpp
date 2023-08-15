@@ -299,27 +299,33 @@ Node *deserializeTree(const string &serializedTree)
 
 void writeBitsToFile(ofstream &out, const string &bits)
 {
+    long long fileSize = (bits.size() + 7) / 8;
+    char *bytesToWrite = new char[fileSize];
+
     char byte = 0;
     int pos = 0;
+    int i = 0;
     for (const char &c : bits)
     {
-        bool b = c == '1';
-        if (b)
+        if (c == '1')
         {
             byte |= (1 << pos);
         }
-        pos++;
+        ++pos;
         if (pos == 8)
         {
-            out.write(&byte, sizeof(byte));
+            bytesToWrite[i] = byte;
+            ++i;
             byte = 0;
             pos = 0;
         }
     }
     if (pos > 0)
     {
-        out.write(&byte, sizeof(byte));
+        bytesToWrite[i] = byte;
     }
+    out.write(bytesToWrite, sizeof(byte) * fileSize);
+    delete[] bytesToWrite;
 }
 
 string readBitsIntoString(ifstream &file, unsigned long long bits)
@@ -352,22 +358,35 @@ string readBitsIntoString(ifstream &file, unsigned long long bits)
     }
     return stream.str();
 }
-
-void compressFile(const string &inputPath, const string &outputPath, const float &maxError)
+void readFloats(const string& inputPath, vector<float>& inputFloats)
 {
-    ifstream file(inputPath);
-    vector<float> inputFloats;
+    ifstream file(inputPath, ios::binary | ios::ate);
     if (!file)
     {
         cerr << "Failed to open the file.\n";
         return;
     }
 
-    float curFloat;
-    while (file.read(reinterpret_cast<char *>(&curFloat), sizeof(curFloat)))
+    auto size = file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    size_t numFloats = size / sizeof(float);
+    inputFloats.reserve(numFloats);
+
+    std::vector<float> buffer(numFloats);
+    if (file.read(reinterpret_cast<char*>(buffer.data()), numFloats * sizeof(float)))
     {
-        inputFloats.push_back(curFloat);
+        inputFloats.insert(inputFloats.end(), buffer.begin(), buffer.end());
     }
+    else
+    {
+        cerr << "Error reading the file.\n";
+    }
+}
+void compressFile(const string &inputPath, const string &outputPath, const float &maxError)
+{
+    vector<float> inputFloats;
+    readFloats(inputPath, inputFloats);
 
     const long long n = inputFloats.size();
     if (n < 2)
