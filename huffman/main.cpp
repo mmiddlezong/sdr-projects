@@ -386,8 +386,8 @@ void compressFile(const string &inputPath, const string &outputPath, const float
         return;
     }
 
-    float extrapolateErrors[n - 2]; // Size n-2
-    float lossyData[n];             // Size n
+    vector<float> extrapolateErrors(n - 2); // Size n-2
+    vector<float> lossyData(n);             // Size n
     lossyData[0] = inputFloats[0];
     lossyData[1] = inputFloats[1];
     // Extrapolation step
@@ -437,10 +437,6 @@ void compressFile(const string &inputPath, const string &outputPath, const float
     writeBitsToFile(out, encoded);
 
     out.close();
-    // cout << "Compression successful.\n";
-    // cout << "Original size: " << inputInts.size() * 4 << " bytes\n";
-    // cout << "Buffer size: " << (bufferSize + 7) / 8 << " bytes\n";
-    // cout << "Encoded size: " << (encoded.size() + 7) / 8 << " bytes\n";
 }
 
 void decompressFile(const string &inputPath, const string &outputPath)
@@ -610,7 +606,7 @@ int main()
         size_t originalSize = getFileSize(filePath);
         size_t compressedSize = getFileSize(compressedPath);
 
-        outputErrors(filePath, outputPath, filePath + "-errors.txt");
+        // outputErrors(filePath, outputPath, filePath + "-errors.txt");
 
         pair<float, float> maxAndAvgError = getMaxAndAvgError(filePath, outputPath);
         float curMaxError = maxAndAvgError.first;

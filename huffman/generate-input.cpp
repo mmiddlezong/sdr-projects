@@ -8,12 +8,12 @@ using namespace std;
 int main()
 {
     const bool print = false;
-    const int n = 10000000;
+    const int n = 1000000;
     const float period = 10.0f;
     const float amplitude = 10.0f;
     const float verticalShift = 10.0f;
     const float noiseStdDev = 0.2f;
-    const string outputPath = "continuous-tests/!sine-10m.in";
+    const string outputPath = "continuous-tests/!sine-1m.in";
 
     random_device rd;
     mt19937 gen(rd());
