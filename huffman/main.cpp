@@ -170,16 +170,6 @@ Node *generateHuffmanTree(const unordered_map<int, unsigned> &freqMap)
     return huffmanTree;
 }
 
-unordered_map<int, unsigned> createFreqMap(const vector<int> &vec)
-{
-    unordered_map<int, unsigned> freqMap;
-    for (int i : vec)
-    {
-        freqMap[i]++;
-    }
-    return freqMap;
-}
-
 string encode(const vector<int> vec, const unordered_map<int, string> &code)
 {
     string res;
@@ -403,14 +393,16 @@ void compressFile(const string &inputPath, const string &outputPath, const float
     }
 
     vector<int> inputInts; // Size n-2
+    unordered_map<int, unsigned> freqMap;
+
     // Split into buckets of size 2 * maxError, where bucket 0 is centered at 0
     for (const auto &err : extrapolateErrors)
     {
         int bucket = round(err / (2 * maxError));
         inputInts.push_back(bucket);
+        freqMap[bucket]++;
     }
 
-    unordered_map<int, unsigned> freqMap = createFreqMap(inputInts);
     Node *tree = generateHuffmanTree(freqMap);
     unordered_map<int, string> code = getHuffmanCode(tree);
 
@@ -617,13 +609,15 @@ int main()
         cout << "- Avg error: " << curAvgError << "\n";
         cout << "- Original file size: " << originalSize << " B\n";
         cout << "- Compressed file size: " << compressedSize << " B\n";
-        cout << "- Compression..." << "\n";
-        cout << "-   ratio: " << (float) originalSize / compressedSize << "\n";
+        cout << "- Compression..."
+             << "\n";
+        cout << "-   ratio: " << (float)originalSize / compressedSize << "\n";
         cout << "-   time: " << compressionTime << " ms\n";
-        cout << "-   throughput: " << (float) originalSize / compressionTime << " KB/s\n";
-        cout << "- Decompression..." << "\n";
+        cout << "-   throughput: " << (float)originalSize / compressionTime << " KB/s\n";
+        cout << "- Decompression..."
+             << "\n";
         cout << "-   time: " << decompressionTime << " ms\n";
-        cout << "-   throughput: " << (float) originalSize / decompressionTime << " KB/s\n";
+        cout << "-   throughput: " << (float)originalSize / decompressionTime << " KB/s\n";
     }
 
     return 0;
