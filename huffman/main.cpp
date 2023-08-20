@@ -588,24 +588,44 @@ pair<float, float> getMaxAndAvgError(const string &filePath1, const string &file
 
 int main()
 {
-    float maxError = 0.05f;
+    fs::path testDir;
+    cout << "Enter dataset directory to test: ";
+    cin >> testDir;
+    float maxError;
+    cout << "Enter max absolute error: ";
+    cin >> maxError;
     vector<string> testCases;
-    const string testDir = "continuous-tests";
+
+    fs::path outputDir = "out" / testDir;
+    fs::create_directories(outputDir);
+    
     for (const auto &entry : fs::directory_iterator(testDir))
     {
-        if (entry.is_regular_file() && entry.path().extension() == ".in")
+        if (entry.is_regular_file())
         {
-            testCases.push_back(entry.path().string());
+            testCases.push_back(entry.path().filename().string());
         }
     }
 
-    for (string filePath : testCases)
+    // Declare totals
+    size_t datasetSize = 0;
+    size_t compressedDatasetSize = 0;
+    float totalCompressionTime = 0.0f;
+
+    // Dataset compression log
+    ofstream compressionLog(outputDir / "compression.log");
+    if (!compressionLog.is_open()) {
+        throw runtime_error("File could not be opened");
+    }
+
+    for (string filename : testCases)
     {
-        string compressedPath = filePath + "-compressed.bin";
-        string outputPath = filePath + "-decompressed.bin";
+        fs::path inputPath = testDir / filename;
+        fs::path compressedPath = outputDir / (filename + "-compressed.bin");
+        fs::path outputPath = outputDir / (filename + "-decompressed.bin");
 
         auto c0 = chrono::high_resolution_clock::now();
-        compressFile(filePath, compressedPath, maxError);
+        compressFile(inputPath, compressedPath, maxError);
         auto c1 = chrono::high_resolution_clock::now();
         decompressFile(compressedPath, outputPath);
         auto c2 = chrono::high_resolution_clock::now();
@@ -614,16 +634,17 @@ int main()
         auto compressionTime = chrono::duration_cast<chrono::microseconds>(c1 - c0).count() / 1000.0f;
         auto decompressionTime = chrono::duration_cast<chrono::microseconds>(c2 - c1).count() / 1000.0f;
 
-        size_t originalSize = getFileSize(filePath);
+        size_t originalSize = getFileSize(inputPath);
         size_t compressedSize = getFileSize(compressedPath);
 
-        // outputErrors(filePath, outputPath, filePath + "-errors.txt");
+        fs::path errorsPath = outputDir / (filename + "-errors.txt");
+        outputErrors(inputPath, outputPath, errorsPath);
 
-        pair<float, float> maxAndAvgError = getMaxAndAvgError(filePath, outputPath);
+        pair<float, float> maxAndAvgError = getMaxAndAvgError(inputPath, outputPath);
         float curMaxError = maxAndAvgError.first;
         float curAvgError = maxAndAvgError.second;
 
-        cout << "Compressed " << filePath << ":\n";
+        cout << "Compressed " << filename << ":\n";
         cout << "- Max error: " << curMaxError << "\n";
         cout << "- Avg error: " << curAvgError << "\n";
         cout << "- Original file size: " << originalSize << " B\n";
@@ -637,7 +658,45 @@ int main()
              << "\n";
         cout << "-   time: " << decompressionTime << " ms\n";
         cout << "-   throughput: " << (float)originalSize / decompressionTime << " KB/s\n";
+
+        compressionLog << "Compressed " << filename << ":\n";
+        compressionLog << "- Max error: " << curMaxError << "\n";
+        compressionLog << "- Avg error: " << curAvgError << "\n";
+        compressionLog << "- Original file size: " << originalSize << " B\n";
+        compressionLog << "- Compressed file size: " << compressedSize << " B\n";
+        compressionLog << "- Compression..."
+             << "\n";
+        compressionLog << "-   ratio: " << (float)originalSize / compressedSize << "\n";
+        compressionLog << "-   time: " << compressionTime << " ms\n";
+        compressionLog << "-   throughput: " << (float)originalSize / compressionTime << " KB/s\n";
+        compressionLog << "- Decompression..."
+             << "\n";
+        compressionLog << "-   time: " << decompressionTime << " ms\n";
+        compressionLog << "-   throughput: " << (float)originalSize / decompressionTime << " KB/s\n";
+
+        // Update running totals for the entire dataset
+        datasetSize += originalSize;
+        compressedDatasetSize += compressedSize;
+        totalCompressionTime += compressionTime;
     }
+
+    cout << "FINISHED! Summary:\n";
+    cout << "- Dataset size: " << datasetSize << " B\n";
+    cout << "- Compressed dataset size: " << compressedDatasetSize << " B\n";
+    cout << "- Compression time: " << totalCompressionTime << " ms\n";
+    cout << "IMPORTANT METRICS:\n";
+    cout << "- Overall compression ratio: " << (float)datasetSize / compressedDatasetSize << "\n";
+    cout << "- Overall throughput: " << (float)datasetSize / totalCompressionTime << " KB/s\n";
+
+    compressionLog << "FINISHED! Summary:\n";
+    compressionLog << "- Dataset size: " << datasetSize << " B\n";
+    compressionLog << "- Compressed dataset size: " << compressedDatasetSize << " B\n";
+    compressionLog << "- Compression time: " << totalCompressionTime << " ms\n";
+    compressionLog << "IMPORTANT METRICS:\n";
+    compressionLog << "- Overall compression ratio: " << (float)datasetSize / compressedDatasetSize << "\n";
+    compressionLog << "- Overall throughput: " << (float)datasetSize / totalCompressionTime << " KB/s\n";
+
+    compressionLog.close();
 
     return 0;
 }
