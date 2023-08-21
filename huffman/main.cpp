@@ -358,7 +358,7 @@ string readBitsIntoString(ifstream &file, unsigned long long bits)
     }
     return stream.str();
 }
-void readFloats(const string& inputPath, vector<float>& inputFloats)
+void readFloats(const string &inputPath, vector<float> &inputFloats)
 {
     ifstream file(inputPath, ios::binary | ios::ate);
     if (!file)
@@ -374,7 +374,7 @@ void readFloats(const string& inputPath, vector<float>& inputFloats)
     inputFloats.reserve(numFloats);
 
     std::vector<float> buffer(numFloats);
-    if (file.read(reinterpret_cast<char*>(buffer.data()), numFloats * sizeof(float)))
+    if (file.read(reinterpret_cast<char *>(buffer.data()), numFloats * sizeof(float)))
     {
         inputFloats.insert(inputFloats.end(), buffer.begin(), buffer.end());
     }
@@ -383,6 +383,21 @@ void readFloats(const string& inputPath, vector<float>& inputFloats)
         cerr << "Error reading the file.\n";
     }
 }
+
+float linearExtrapolation(const float &x0, const float &x1)
+{
+    return 2 * x1 - x0;
+}
+float piecewiseExtrapolation(const float &x0, const float &x1)
+{
+    return x1;
+}
+float extrapolateNext(const float &x0, const float &x1)
+{
+    return linearExtrapolation(x0, x1);
+}
+
+
 void compressFile(const string &inputPath, const string &outputPath, const float &maxError)
 {
     vector<float> inputFloats;
@@ -402,7 +417,7 @@ void compressFile(const string &inputPath, const string &outputPath, const float
     // Extrapolation step
     for (size_t i = 2; i < inputFloats.size(); ++i)
     {
-        const float extrapolatedFloat = 2 * lossyData[i - 1] - lossyData[i - 2];
+        const float extrapolatedFloat = extrapolateNext(lossyData[i - 2], lossyData[i - 1]);
         const float err = inputFloats[i] - extrapolatedFloat;
         extrapolateErrors[i - 2] = err;
 
@@ -498,7 +513,7 @@ void decompressFile(const string &inputPath, const string &outputPath)
         const float decodedErr = decodedInts[i] * 2 * maxError;
 
         // Extrapolate the new data point and adjust for error
-        const float extrapolatedFloat = 2 * reconstructedData[i + 1] - reconstructedData[i];
+        const float extrapolatedFloat = extrapolateNext(reconstructedData[i], reconstructedData[i + 1]);
         const float reconstructedFloat = extrapolatedFloat + decodedErr;
         reconstructedData.push_back(reconstructedFloat);
     }
@@ -598,7 +613,7 @@ int main()
 
     fs::path outputDir = "out" / testDir;
     fs::create_directories(outputDir);
-    
+
     for (const auto &entry : fs::directory_iterator(testDir))
     {
         if (entry.is_regular_file())
@@ -614,7 +629,8 @@ int main()
 
     // Dataset compression log
     ofstream compressionLog(outputDir / "compression.log");
-    if (!compressionLog.is_open()) {
+    if (!compressionLog.is_open())
+    {
         throw runtime_error("File could not be opened");
     }
 
@@ -665,12 +681,12 @@ int main()
         compressionLog << "- Original file size: " << originalSize << " B\n";
         compressionLog << "- Compressed file size: " << compressedSize << " B\n";
         compressionLog << "- Compression..."
-             << "\n";
+                       << "\n";
         compressionLog << "-   ratio: " << (float)originalSize / compressedSize << "\n";
         compressionLog << "-   time: " << compressionTime << " ms\n";
         compressionLog << "-   throughput: " << (float)originalSize / compressionTime << " KB/s\n";
         compressionLog << "- Decompression..."
-             << "\n";
+                       << "\n";
         compressionLog << "-   time: " << decompressionTime << " ms\n";
         compressionLog << "-   throughput: " << (float)originalSize / decompressionTime << " KB/s\n";
 
