@@ -710,6 +710,14 @@ int main()
         throw runtime_error("Invalid extrapolation method");
     }
 
+    // Verify if user wants to continue
+    string inputContinue;
+    cout << "Continue (y/n)?";
+    cin >> inputContinue;
+    if (inputContinue != "y") {
+        return 0;
+    }
+
     vector<string> testCases;
 
     fs::path outputDir = "out" / testDir;
