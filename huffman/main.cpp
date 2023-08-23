@@ -454,6 +454,10 @@ void compressFile(const string &inputPath, const string &outputPath, const float
         maxError = range * error;
     }
 
+    if (abs(maxError) < 1.0E-15F) {
+        cout << "WARNING! Max error has extremely small magnitude: " << maxError << "\n";
+    }
+
     vector<float> extrapolateErrors(n - 2); // Size n-2
     vector<float> lossyData(n);             // Size n
     lossyData[0] = inputFloats[0];
@@ -712,7 +716,7 @@ int main()
 
     // Verify if user wants to continue
     string inputContinue;
-    cout << "Continue (y/n)?";
+    cout << "Continue (y/n)? ";
     cin >> inputContinue;
     if (inputContinue != "y") {
         return 0;
