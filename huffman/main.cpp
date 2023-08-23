@@ -413,8 +413,12 @@ float extrapolateNext(const float &x0, const float &x1, const ExtrapolationMetho
         throw runtime_error("Unknown extrapolation method.");
     }
 }
-
-void compressFile(const string &inputPath, const string &outputPath, const float &maxError, const ExtrapolationMethod &extrapolationMethod)
+enum ErrorMode
+{
+    absolute,
+    relative
+};
+void compressFile(const string &inputPath, const string &outputPath, const float &error, const ErrorMode &errorMode, const ExtrapolationMethod &extrapolationMethod)
 {
     vector<float> inputFloats;
     readFloats(inputPath, inputFloats);
@@ -424,6 +428,30 @@ void compressFile(const string &inputPath, const string &outputPath, const float
     {
         cerr << "File contains fewer than two data points.\n";
         return;
+    }
+
+    float minFloat = std::numeric_limits<float>::max();
+    float maxFloat = std::numeric_limits<float>::lowest();
+
+    for (float f : inputFloats)
+    {
+        if (f < minFloat)
+            minFloat = f;
+        if (f > maxFloat)
+            maxFloat = f;
+    }
+
+    float range = maxFloat - minFloat;
+
+    float maxError;
+    // Calculate absolute error
+    if (errorMode == absolute)
+    {
+        maxError = error;
+    }
+    else
+    {
+        maxError = range * error;
     }
 
     vector<float> extrapolateErrors(n - 2); // Size n-2
@@ -637,8 +665,32 @@ int main()
     cout << "Enter dataset directory to test: ";
     cin >> testDir;
 
+    string inputErrorMode;
+    cout << "Enter error mode (absolute, relative): ";
+    cin >> inputErrorMode;
+
+    // Parse the error mode
+    static unordered_map<string, ErrorMode> const errorModeNames = {{"absolute", absolute}, {"relative", relative}};
+    ErrorMode errorMode;
+    auto it = errorModeNames.find(inputErrorMode);
+    if (it != errorModeNames.end())
+    {
+        errorMode = it->second;
+    }
+    else
+    {
+        throw runtime_error("Invalid error mode");
+    }
+
     float maxError;
-    cout << "Enter max absolute error: ";
+    if (errorMode == absolute)
+    {
+        cout << "Enter max absolute error: ";
+    }
+    else if (errorMode == relative)
+    {
+        cout << "Enter max relative error: ";
+    }
     cin >> maxError;
 
     string inputMethod;
@@ -648,10 +700,10 @@ int main()
     // Parse the extrapolation method
     static unordered_map<string, ExtrapolationMethod> const methodNames = {{"linear", linear}, {"piecewise", piecewise}, {"none", none}};
     ExtrapolationMethod extrapolationMethod;
-    auto it = methodNames.find(inputMethod);
-    if (it != methodNames.end())
+    auto it_ = methodNames.find(inputMethod);
+    if (it_ != methodNames.end())
     {
-        extrapolationMethod = it->second;
+        extrapolationMethod = it_->second;
     }
     else
     {
@@ -677,7 +729,7 @@ int main()
     float totalCompressionTime = 0.0f;
 
     // Dataset compression log
-    string compressionLogName = "compression-" + getCurrentTimeFormatted() + ".log"; // Based on current time
+    string compressionLogName = "compression-" + inputMethod + "-" + getCurrentTimeFormatted() + ".log"; // Based on current time
     ofstream compressionLog(outputDir / compressionLogName);
     if (!compressionLog.is_open())
     {
@@ -691,7 +743,7 @@ int main()
         fs::path outputPath = outputDir / (filename + "-decompressed.bin");
 
         auto c0 = chrono::high_resolution_clock::now();
-        compressFile(inputPath, compressedPath, maxError, extrapolationMethod);
+        compressFile(inputPath, compressedPath, maxError, errorMode, extrapolationMethod);
         auto c1 = chrono::high_resolution_clock::now();
         decompressFile(compressedPath, outputPath, extrapolationMethod);
         auto c2 = chrono::high_resolution_clock::now();
@@ -747,20 +799,24 @@ int main()
     }
 
     cout << "FINISHED! Summary:\n";
-    cout << "- Extrapolation method: " << inputMethod << "\n";
+
     cout << "- Dataset size: " << datasetSize << " B\n";
     cout << "- Compressed dataset size: " << compressedDatasetSize << " B\n";
     cout << "- Compression time: " << totalCompressionTime << " ms\n";
-    cout << "IMPORTANT METRICS:\n";
+    cout << "METRICS:\n";
+    cout << "- Extrapolation method: " << inputMethod << "\n";
+    cout << "- Max error: " << maxError << " " << inputErrorMode << "\n";
     cout << "- Overall compression ratio: " << (float)datasetSize / compressedDatasetSize << "\n";
     cout << "- Overall throughput: " << (float)datasetSize / totalCompressionTime << " KB/s\n";
 
     compressionLog << "FINISHED! Summary:\n";
-    compressionLog << "- Extrapolation method: " << inputMethod << "\n";
+
     compressionLog << "- Dataset size: " << datasetSize << " B\n";
     compressionLog << "- Compressed dataset size: " << compressedDatasetSize << " B\n";
     compressionLog << "- Compression time: " << totalCompressionTime << " ms\n";
-    compressionLog << "IMPORTANT METRICS:\n";
+    compressionLog << "METRICS:\n";
+    compressionLog << "- Extrapolation method: " << inputMethod << "\n";
+    compressionLog << "- Max error: " << maxError << " " << inputErrorMode << "\n";
     compressionLog << "- Overall compression ratio: " << (float)datasetSize / compressedDatasetSize << "\n";
     compressionLog << "- Overall throughput: " << (float)datasetSize / totalCompressionTime << " KB/s\n";
 
