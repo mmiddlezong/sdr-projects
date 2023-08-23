@@ -10,6 +10,9 @@
 #include <bitset>
 #include <cmath>
 #include <limits>
+#include <string>
+#include <ctime>
+#include <iomanip>
 
 using namespace std;
 namespace fs = filesystem;
@@ -384,21 +387,34 @@ void readFloats(const string &inputPath, vector<float> &inputFloats)
     }
 }
 
-float linearExtrapolation(const float &x0, const float &x1)
+enum ExtrapolationMethod
 {
-    return 2 * x1 - x0;
-}
-float piecewiseExtrapolation(const float &x0, const float &x1)
+    linear,
+    piecewise,
+    none
+};
+
+float extrapolateNext(const float &x0, const float &x1, const ExtrapolationMethod &method)
 {
-    return x1;
-}
-float extrapolateNext(const float &x0, const float &x1)
-{
-    return linearExtrapolation(x0, x1);
+    if (method == linear)
+    {
+        return 2 * x1 - x0;
+    }
+    else if (method == piecewise)
+    {
+        return x1;
+    }
+    else if (method == none)
+    {
+        return 0;
+    }
+    else
+    {
+        throw runtime_error("Unknown extrapolation method.");
+    }
 }
 
-
-void compressFile(const string &inputPath, const string &outputPath, const float &maxError)
+void compressFile(const string &inputPath, const string &outputPath, const float &maxError, const ExtrapolationMethod &extrapolationMethod)
 {
     vector<float> inputFloats;
     readFloats(inputPath, inputFloats);
@@ -417,7 +433,7 @@ void compressFile(const string &inputPath, const string &outputPath, const float
     // Extrapolation step
     for (size_t i = 2; i < inputFloats.size(); ++i)
     {
-        const float extrapolatedFloat = extrapolateNext(lossyData[i - 2], lossyData[i - 1]);
+        const float extrapolatedFloat = extrapolateNext(lossyData[i - 2], lossyData[i - 1], extrapolationMethod);
         const float err = inputFloats[i] - extrapolatedFloat;
         extrapolateErrors[i - 2] = err;
 
@@ -465,7 +481,7 @@ void compressFile(const string &inputPath, const string &outputPath, const float
     out.close();
 }
 
-void decompressFile(const string &inputPath, const string &outputPath)
+void decompressFile(const string &inputPath, const string &outputPath, const ExtrapolationMethod &extrapolationMethod)
 {
     auto startTotal = chrono::high_resolution_clock::now();
     ifstream compressed(inputPath, ios::binary);
@@ -513,7 +529,7 @@ void decompressFile(const string &inputPath, const string &outputPath)
         const float decodedErr = decodedInts[i] * 2 * maxError;
 
         // Extrapolate the new data point and adjust for error
-        const float extrapolatedFloat = extrapolateNext(reconstructedData[i], reconstructedData[i + 1]);
+        const float extrapolatedFloat = extrapolateNext(reconstructedData[i], reconstructedData[i + 1], extrapolationMethod);
         const float reconstructedFloat = extrapolatedFloat + decodedErr;
         reconstructedData.push_back(reconstructedFloat);
     }
@@ -601,14 +617,47 @@ pair<float, float> getMaxAndAvgError(const string &filePath1, const string &file
     return make_pair(maxError, avgError);
 }
 
+string getCurrentTimeFormatted()
+{
+    time_t t = time(nullptr);
+    tm *localTime = localtime(&t);
+
+    char buffer[20];
+
+    // Use strftime to format the time
+    strftime(buffer, sizeof(buffer), "%Y-%m-%d.%H:%M:%S", localTime);
+
+    return string(buffer);
+}
+
 int main()
 {
+    // Take in inputs
     fs::path testDir;
     cout << "Enter dataset directory to test: ";
     cin >> testDir;
+
     float maxError;
     cout << "Enter max absolute error: ";
     cin >> maxError;
+
+    string inputMethod;
+    cout << "Enter extrapolation method (linear, piecewise, none): ";
+    cin >> inputMethod;
+
+    // Parse the extrapolation method
+    static unordered_map<string, ExtrapolationMethod> const methodNames = {{"linear", linear}, {"piecewise", piecewise}, {"none", none}};
+    ExtrapolationMethod extrapolationMethod;
+    auto it = methodNames.find(inputMethod);
+    if (it != methodNames.end())
+    {
+        extrapolationMethod = it->second;
+    }
+    else
+    {
+        throw runtime_error("Invalid extrapolation method");
+    }
+
     vector<string> testCases;
 
     fs::path outputDir = "out" / testDir;
@@ -628,7 +677,8 @@ int main()
     float totalCompressionTime = 0.0f;
 
     // Dataset compression log
-    ofstream compressionLog(outputDir / "compression.log");
+    string compressionLogName = "compression-" + getCurrentTimeFormatted() + ".log"; // Based on current time
+    ofstream compressionLog(outputDir / compressionLogName);
     if (!compressionLog.is_open())
     {
         throw runtime_error("File could not be opened");
@@ -641,9 +691,9 @@ int main()
         fs::path outputPath = outputDir / (filename + "-decompressed.bin");
 
         auto c0 = chrono::high_resolution_clock::now();
-        compressFile(inputPath, compressedPath, maxError);
+        compressFile(inputPath, compressedPath, maxError, extrapolationMethod);
         auto c1 = chrono::high_resolution_clock::now();
-        decompressFile(compressedPath, outputPath);
+        decompressFile(compressedPath, outputPath, extrapolationMethod);
         auto c2 = chrono::high_resolution_clock::now();
 
         // Get time in ms
@@ -654,7 +704,7 @@ int main()
         size_t compressedSize = getFileSize(compressedPath);
 
         fs::path errorsPath = outputDir / (filename + "-errors.txt");
-        outputErrors(inputPath, outputPath, errorsPath);
+        // outputErrors(inputPath, outputPath, errorsPath);
 
         pair<float, float> maxAndAvgError = getMaxAndAvgError(inputPath, outputPath);
         float curMaxError = maxAndAvgError.first;
@@ -697,6 +747,7 @@ int main()
     }
 
     cout << "FINISHED! Summary:\n";
+    cout << "- Extrapolation method: " << inputMethod << "\n";
     cout << "- Dataset size: " << datasetSize << " B\n";
     cout << "- Compressed dataset size: " << compressedDatasetSize << " B\n";
     cout << "- Compression time: " << totalCompressionTime << " ms\n";
@@ -705,6 +756,7 @@ int main()
     cout << "- Overall throughput: " << (float)datasetSize / totalCompressionTime << " KB/s\n";
 
     compressionLog << "FINISHED! Summary:\n";
+    compressionLog << "- Extrapolation method: " << inputMethod << "\n";
     compressionLog << "- Dataset size: " << datasetSize << " B\n";
     compressionLog << "- Compressed dataset size: " << compressedDatasetSize << " B\n";
     compressionLog << "- Compression time: " << totalCompressionTime << " ms\n";
