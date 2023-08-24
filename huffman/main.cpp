@@ -662,72 +662,13 @@ string getCurrentTimeFormatted()
     return string(buffer);
 }
 
-int main()
-{
-    // Take in inputs
-    fs::path testDir;
-    cout << "Enter dataset directory to test: ";
-    cin >> testDir;
-
-    string inputErrorMode;
-    cout << "Enter error mode (absolute, relative): ";
-    cin >> inputErrorMode;
-
-    // Parse the error mode
-    static unordered_map<string, ErrorMode> const errorModeNames = {{"absolute", absolute}, {"relative", relative}};
-    ErrorMode errorMode;
-    auto it = errorModeNames.find(inputErrorMode);
-    if (it != errorModeNames.end())
-    {
-        errorMode = it->second;
-    }
-    else
-    {
-        throw runtime_error("Invalid error mode");
-    }
-
-    float maxError;
-    if (errorMode == absolute)
-    {
-        cout << "Enter max absolute error: ";
-    }
-    else if (errorMode == relative)
-    {
-        cout << "Enter max relative error: ";
-    }
-    cin >> maxError;
-
-    string inputMethod;
-    cout << "Enter extrapolation method (linear, piecewise, none): ";
-    cin >> inputMethod;
-
-    // Parse the extrapolation method
-    static unordered_map<string, ExtrapolationMethod> const methodNames = {{"linear", linear}, {"piecewise", piecewise}, {"none", none}};
-    ExtrapolationMethod extrapolationMethod;
-    auto it_ = methodNames.find(inputMethod);
-    if (it_ != methodNames.end())
-    {
-        extrapolationMethod = it_->second;
-    }
-    else
-    {
-        throw runtime_error("Invalid extrapolation method");
-    }
-
-    // Verify if user wants to continue
-    string inputContinue;
-    cout << "Continue (y/n)? ";
-    cin >> inputContinue;
-    if (inputContinue != "y") {
-        return 0;
-    }
-
+void compressDataset(fs::path &datasetDirectory, float &maxError, ErrorMode &errorMode, string &errorModeName, ExtrapolationMethod &extrapolationMethod, string &methodName) {
     vector<string> testCases;
 
-    fs::path outputDir = "out" / testDir;
+    fs::path outputDir = "out" / datasetDirectory;
     fs::create_directories(outputDir);
 
-    for (const auto &entry : fs::directory_iterator(testDir))
+    for (const auto &entry : fs::directory_iterator(datasetDirectory))
     {
         if (entry.is_regular_file())
         {
@@ -741,7 +682,7 @@ int main()
     float totalCompressionTime = 0.0f;
 
     // Dataset compression log
-    string compressionLogName = "compression-" + inputMethod + "-" + getCurrentTimeFormatted() + ".log"; // Based on current time
+    string compressionLogName = "compression-" + methodName + "-" + getCurrentTimeFormatted() + ".log"; // Based on current time
     ofstream compressionLog(outputDir / compressionLogName);
     if (!compressionLog.is_open())
     {
@@ -750,7 +691,7 @@ int main()
 
     for (string filename : testCases)
     {
-        fs::path inputPath = testDir / filename;
+        fs::path inputPath = datasetDirectory / filename;
         fs::path compressedPath = outputDir / (filename + "-compressed.bin");
         fs::path outputPath = outputDir / (filename + "-decompressed.bin");
 
@@ -816,8 +757,8 @@ int main()
     cout << "- Compressed dataset size: " << compressedDatasetSize << " B\n";
     cout << "- Compression time: " << totalCompressionTime << " ms\n";
     cout << "METRICS:\n";
-    cout << "- Extrapolation method: " << inputMethod << "\n";
-    cout << "- Max error: " << maxError << " " << inputErrorMode << "\n";
+    cout << "- Extrapolation method: " << methodName << "\n";
+    cout << "- Max error: " << maxError << " " << errorModeName << "\n";
     cout << "- Overall compression ratio: " << (float)datasetSize / compressedDatasetSize << "\n";
     cout << "- Overall throughput: " << (float)datasetSize / totalCompressionTime << " KB/s\n";
 
@@ -827,12 +768,75 @@ int main()
     compressionLog << "- Compressed dataset size: " << compressedDatasetSize << " B\n";
     compressionLog << "- Compression time: " << totalCompressionTime << " ms\n";
     compressionLog << "METRICS:\n";
-    compressionLog << "- Extrapolation method: " << inputMethod << "\n";
-    compressionLog << "- Max error: " << maxError << " " << inputErrorMode << "\n";
+    compressionLog << "- Extrapolation method: " << methodName << "\n";
+    compressionLog << "- Max error: " << maxError << " " << errorModeName << "\n";
     compressionLog << "- Overall compression ratio: " << (float)datasetSize / compressedDatasetSize << "\n";
     compressionLog << "- Overall throughput: " << (float)datasetSize / totalCompressionTime << " KB/s\n";
 
     compressionLog.close();
+}
+
+int main()
+{
+    // Take in inputs
+    fs::path testDir;
+    cout << "Enter dataset directory to test: ";
+    cin >> testDir;
+
+    string inputErrorMode;
+    cout << "Enter error mode (absolute, relative): ";
+    cin >> inputErrorMode;
+
+    // Parse the error mode
+    static unordered_map<string, ErrorMode> const errorModeNames = {{"absolute", absolute}, {"relative", relative}};
+    ErrorMode errorMode;
+    auto it = errorModeNames.find(inputErrorMode);
+    if (it != errorModeNames.end())
+    {
+        errorMode = it->second;
+    }
+    else
+    {
+        throw runtime_error("Invalid error mode");
+    }
+
+    float maxError;
+    if (errorMode == absolute)
+    {
+        cout << "Enter max absolute error: ";
+    }
+    else if (errorMode == relative)
+    {
+        cout << "Enter max relative error: ";
+    }
+    cin >> maxError;
+
+    string inputMethod;
+    cout << "Enter extrapolation method (linear, piecewise, none): ";
+    cin >> inputMethod;
+
+    // Parse the extrapolation method
+    static unordered_map<string, ExtrapolationMethod> const methodNames = {{"linear", linear}, {"piecewise", piecewise}, {"none", none}};
+    ExtrapolationMethod extrapolationMethod;
+    auto it_ = methodNames.find(inputMethod);
+    if (it_ != methodNames.end())
+    {
+        extrapolationMethod = it_->second;
+    }
+    else
+    {
+        throw runtime_error("Invalid extrapolation method");
+    }
+
+    // Verify if user wants to continue
+    string inputContinue;
+    cout << "Continue (y/n)? ";
+    cin >> inputContinue;
+    if (inputContinue != "y") {
+        return 0;
+    }
+
+    compressDataset(testDir, maxError, errorMode, inputErrorMode, extrapolationMethod, inputMethod);
 
     return 0;
 }
