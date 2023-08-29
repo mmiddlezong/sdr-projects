@@ -391,18 +391,27 @@ enum ExtrapolationMethod
 {
     linear,
     piecewise,
+    quadratic,
     none
 };
 
-float extrapolateNext(const float &x0, const float &x1, const ExtrapolationMethod &method)
+float extrapolateNext(vector<float> &data, int index, const ExtrapolationMethod &method)
 {
     if (method == linear)
     {
-        return 2 * x1 - x0;
+        return 2 * data[index - 1] - data[index - 2];
     }
     else if (method == piecewise)
     {
-        return x1;
+        return data[index - 1];
+    }
+    else if (method == quadratic)
+    {
+        if (index < 3)
+        {
+            return 2 * data[index - 1] - data[index - 2];
+        }
+        return data[index - 3] - 3 * data[index - 2] + 3 * data[index - 1];
     }
     else if (method == none)
     {
@@ -454,7 +463,8 @@ void compressFile(const string &inputPath, const string &outputPath, const float
         maxError = range * error;
     }
 
-    if (abs(maxError) < 1.0E-15F) {
+    if (abs(maxError) < 1.0E-15F)
+    {
         cout << "WARNING! Max error has extremely small magnitude: " << maxError << "\n";
     }
 
@@ -465,7 +475,7 @@ void compressFile(const string &inputPath, const string &outputPath, const float
     // Extrapolation step
     for (size_t i = 2; i < inputFloats.size(); ++i)
     {
-        const float extrapolatedFloat = extrapolateNext(lossyData[i - 2], lossyData[i - 1], extrapolationMethod);
+        const float extrapolatedFloat = extrapolateNext(lossyData, i, extrapolationMethod);
         const float err = inputFloats[i] - extrapolatedFloat;
         extrapolateErrors[i - 2] = err;
 
@@ -561,7 +571,7 @@ void decompressFile(const string &inputPath, const string &outputPath, const Ext
         const float decodedErr = decodedInts[i] * 2 * maxError;
 
         // Extrapolate the new data point and adjust for error
-        const float extrapolatedFloat = extrapolateNext(reconstructedData[i], reconstructedData[i + 1], extrapolationMethod);
+        const float extrapolatedFloat = extrapolateNext(reconstructedData, i + 2, extrapolationMethod);
         const float reconstructedFloat = extrapolatedFloat + decodedErr;
         reconstructedData.push_back(reconstructedFloat);
     }
@@ -662,7 +672,8 @@ string getCurrentTimeFormatted()
     return string(buffer);
 }
 
-void compressDataset(fs::path &datasetDirectory, float &maxError, ErrorMode &errorMode, string &errorModeName, ExtrapolationMethod &extrapolationMethod, string &methodName) {
+void compressDataset(const fs::path &datasetDirectory, float maxError, const ErrorMode &errorMode, const string &errorModeName, const ExtrapolationMethod &extrapolationMethod, const string &methodName)
+{
     vector<string> testCases;
 
     fs::path outputDir = "out" / datasetDirectory;
@@ -778,6 +789,29 @@ void compressDataset(fs::path &datasetDirectory, float &maxError, ErrorMode &err
 
 int main()
 {
+    static unordered_map<string, ErrorMode> const errorModeNames = {{"absolute", absolute}, {"relative", relative}};
+    static unordered_map<string, ExtrapolationMethod> const methodNames = {{"linear", linear}, {"piecewise", piecewise}, {"none", none}, {"quadratic", quadratic}};
+
+    /* vector<fs::path> datasets = {"real-datasets/CESM-ATM", "real-datasets/EXAALT", "real-datasets/ISABEL"};
+    vector<float> errors = {1E-4, 1E-5, 1E-6};
+    vector<string> methods = {"linear", "piecewise"};
+
+    for (const fs::path &dataset : datasets)
+    {
+        for (const float &error : errors)
+        {
+            for (const string &method : methods)
+            {
+                if (dataset == "real-datasets/CESM-ATM" && error <= 2E-6)
+                {
+                    compressDataset(dataset, error, relative, "relative", methodNames.at(method), method);
+                }
+            }
+        }
+    }
+
+    return 0; */
+
     // Take in inputs
     fs::path testDir;
     cout << "Enter dataset directory to test: ";
@@ -788,7 +822,7 @@ int main()
     cin >> inputErrorMode;
 
     // Parse the error mode
-    static unordered_map<string, ErrorMode> const errorModeNames = {{"absolute", absolute}, {"relative", relative}};
+
     ErrorMode errorMode;
     auto it = errorModeNames.find(inputErrorMode);
     if (it != errorModeNames.end())
@@ -812,11 +846,11 @@ int main()
     cin >> maxError;
 
     string inputMethod;
-    cout << "Enter extrapolation method (linear, piecewise, none): ";
+    cout << "Enter extrapolation method (linear, piecewise, none, quadratic): ";
     cin >> inputMethod;
 
     // Parse the extrapolation method
-    static unordered_map<string, ExtrapolationMethod> const methodNames = {{"linear", linear}, {"piecewise", piecewise}, {"none", none}};
+
     ExtrapolationMethod extrapolationMethod;
     auto it_ = methodNames.find(inputMethod);
     if (it_ != methodNames.end())
@@ -832,7 +866,8 @@ int main()
     string inputContinue;
     cout << "Continue (y/n)? ";
     cin >> inputContinue;
-    if (inputContinue != "y") {
+    if (inputContinue != "y")
+    {
         return 0;
     }
 
