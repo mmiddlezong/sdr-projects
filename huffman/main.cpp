@@ -481,13 +481,15 @@ void compressFile(const string &inputPath, const string &outputPath, const float
     }
 
     vector<float> extrapolateErrors;
+    vector<float> anchors;
     long long blockStart = 0;
     while (blockStart < n)
     {
         int blockPos = 0;
         int blockCap = min((long long)1024, n - blockStart);
-        vector<float> blockData(blockCap);             // Size n
+        vector<float> blockData(blockCap); // Size n
         blockData[0] = inputFloats[blockStart];
+        anchors.push_back(blockData[0]);
         // Extrapolation step
         for (blockPos = 1; blockPos < blockCap; ++blockPos)
         {
@@ -505,7 +507,7 @@ void compressFile(const string &inputPath, const string &outputPath, const float
 
     cout << "Average error: " << getAbsAverage(extrapolateErrors) << "\n";
 
-    vector<int> inputInts; // Size n-2
+    vector<int> inputInts;
     unordered_map<int, unsigned> freqMap;
 
     // Split into buckets of size 2 * maxError, where bucket 0 is centered at 0
@@ -527,16 +529,20 @@ void compressFile(const string &inputPath, const string &outputPath, const float
     // Write the compressed file
     ofstream out(outputPath, ios::binary | ios::out);
 
-    // Store block starts
-    out.write(reinterpret_cast<char *>(&inputFloats[0]), sizeof(maxError));
-    out.write(reinterpret_cast<char *>(&inputFloats[1]), sizeof(maxError));
-
     // 4 bytes to store maxError
     out.write(reinterpret_cast<const char *>(&maxError), sizeof(maxError));
 
     // 4 + 8 bytes to store bufferSize and encodedSize
     out.write(reinterpret_cast<char *>(&bufferSize), sizeof(bufferSize));
     out.write(reinterpret_cast<char *>(&encodedSize), sizeof(encodedSize));
+
+    // Store anchors
+    int numAnchors = anchors.size();
+    out.write(reinterpret_cast<char *>(&numAnchors), sizeof(numAnchors));
+    for (size_t i = 0; i < numAnchors; i++)
+    {
+        out.write(reinterpret_cast<char *>(&anchors[i]), sizeof(anchors[i]));
+    }
 
     writeBitsToFile(out, buffer);
     writeBitsToFile(out, encoded);
@@ -556,20 +562,26 @@ void decompressFile(const string &inputPath, const string &outputPath, const Ext
     }
 
     float maxError;
-    float x0, x1;
-    vector<float> reconstructedData;
     unsigned bufferSize;
     unsigned long long encodedSize;
+    int numAnchors;
 
-    compressed.read(reinterpret_cast<char *>(&x0), sizeof(x0));
-    compressed.read(reinterpret_cast<char *>(&x1), sizeof(x1));
-    reconstructedData.push_back(x0);
-    reconstructedData.push_back(x1);
-
+    // Read metadata
     compressed.read(reinterpret_cast<char *>(&maxError), sizeof(maxError));
-
     compressed.read(reinterpret_cast<char *>(&bufferSize), sizeof(bufferSize));
     compressed.read(reinterpret_cast<char *>(&encodedSize), sizeof(encodedSize));
+
+    // Read anchors
+    compressed.read(reinterpret_cast<char *>(&numAnchors), sizeof(numAnchors));
+    vector<float> anchors(numAnchors);
+    vector<float> reconstructedData;
+    reconstructedData.reserve(1024 * numAnchors);
+    for (size_t i = 0; i < numAnchors; i++)
+    {
+        float anchor;
+        compressed.read(reinterpret_cast<char *>(&anchor), sizeof(anchor));
+        anchors[i] = anchor;
+    }
 
     string serializedTree = readBitsIntoString(compressed, bufferSize);
     string encodedData = readBitsIntoString(compressed, encodedSize);
@@ -585,18 +597,30 @@ void decompressFile(const string &inputPath, const string &outputPath, const Ext
         return;
     }
 
+    long long pos = 0;
+    vector<float> blockData;
     // Reconstruction step
-    for (size_t i = 0; i < decodedInts.size(); ++i)
+    for (const int &bucket : decodedInts)
     {
+        // Check if it's the start of a block
+        if (pos % 1024 == 0)
+        {
+            // Flush block data onto reconstructed data
+            reconstructedData.insert(reconstructedData.end(), blockData.begin(), blockData.end());
+            blockData.clear();
+            blockData.push_back(anchors[pos / 1024]);
+            ++pos;
+        }
         // Convert the bucket number back to float
-        const float decodedErr = decodedInts[i] * 2 * maxError;
+        const float decodedErr = bucket * 2 * maxError;
 
         // Extrapolate the new data point and adjust for error
-        const float extrapolatedFloat = extrapolateNext(reconstructedData, i + 2, extrapolationMethod);
+        const float extrapolatedFloat = extrapolateNext(blockData, pos % 1024, extrapolationMethod);
         const float reconstructedFloat = extrapolatedFloat + decodedErr;
-        reconstructedData.push_back(reconstructedFloat);
+        blockData.push_back(reconstructedFloat);
+        ++pos;
     }
-
+    reconstructedData.insert(reconstructedData.end(), blockData.begin(), blockData.end());
     // Write reconstructed data to file
     for (const auto &f : reconstructedData)
     {
