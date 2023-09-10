@@ -427,6 +427,19 @@ enum ErrorMode
     absolute,
     relative
 };
+float getAbsAverage(const std::vector<float>& vec) {
+    if (vec.empty()) {
+        return 0.0f; // Handle empty vector case
+    }
+    
+    float sum = 0.0f;
+    for (float num : vec) {
+        sum += abs(num);
+    }
+    
+    return sum / vec.size();
+}
+
 void compressFile(const string &inputPath, const string &outputPath, const float &error, const ErrorMode &errorMode, const ExtrapolationMethod &extrapolationMethod)
 {
     vector<float> inputFloats;
@@ -483,6 +496,8 @@ void compressFile(const string &inputPath, const string &outputPath, const float
         float quantizedErr = round(err / (2 * maxError)) * 2 * maxError;
         lossyData[i] = extrapolatedFloat + quantizedErr;
     }
+
+    cout << "Average error: " << getAbsAverage(extrapolateErrors) << "\n";
 
     vector<int> inputInts; // Size n-2
     unordered_map<int, unsigned> freqMap;
