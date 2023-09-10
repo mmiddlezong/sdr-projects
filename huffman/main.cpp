@@ -397,25 +397,21 @@ enum ExtrapolationMethod
 
 float extrapolateNext(vector<float> &data, int index, const ExtrapolationMethod &method)
 {
-    if (method == linear)
+    if (method == none || index < 1)
     {
-        return 2 * data[index - 1] - data[index - 2];
+        return 0;
     }
-    else if (method == piecewise)
+    else if (method == piecewise || index < 2)
     {
         return data[index - 1];
     }
+    else if (method == linear || index < 3)
+    {
+        return 2 * data[index - 1] - data[index - 2];
+    }
     else if (method == quadratic)
     {
-        if (index < 3)
-        {
-            return 2 * data[index - 1] - data[index - 2];
-        }
         return data[index - 3] - 3 * data[index - 2] + 3 * data[index - 1];
-    }
-    else if (method == none)
-    {
-        return 0;
     }
     else
     {
@@ -427,16 +423,19 @@ enum ErrorMode
     absolute,
     relative
 };
-float getAbsAverage(const std::vector<float>& vec) {
-    if (vec.empty()) {
+float getAbsAverage(const std::vector<float> &vec)
+{
+    if (vec.empty())
+    {
         return 0.0f; // Handle empty vector case
     }
-    
+
     float sum = 0.0f;
-    for (float num : vec) {
+    for (float num : vec)
+    {
         sum += abs(num);
     }
-    
+
     return sum / vec.size();
 }
 
@@ -481,20 +480,27 @@ void compressFile(const string &inputPath, const string &outputPath, const float
         cout << "WARNING! Max error has extremely small magnitude: " << maxError << "\n";
     }
 
-    vector<float> extrapolateErrors(n - 2); // Size n-2
-    vector<float> lossyData(n);             // Size n
-    lossyData[0] = inputFloats[0];
-    lossyData[1] = inputFloats[1];
-    // Extrapolation step
-    for (size_t i = 2; i < inputFloats.size(); ++i)
+    vector<float> extrapolateErrors;
+    long long blockStart = 0;
+    while (blockStart < n)
     {
-        const float extrapolatedFloat = extrapolateNext(lossyData, i, extrapolationMethod);
-        const float err = inputFloats[i] - extrapolatedFloat;
-        extrapolateErrors[i - 2] = err;
+        int blockPos = 0;
+        int blockCap = min((long long)1024, n - blockStart);
+        vector<float> blockData(blockCap);             // Size n
+        blockData[0] = inputFloats[blockStart];
+        // Extrapolation step
+        for (blockPos = 1; blockPos < blockCap; ++blockPos)
+        {
+            const float extrapolatedFloat = extrapolateNext(blockData, blockPos, extrapolationMethod);
+            const float err = inputFloats[blockStart + blockPos] - extrapolatedFloat;
+            extrapolateErrors.push_back(err);
 
-        // Figure out what err would quantize to
-        float quantizedErr = round(err / (2 * maxError)) * 2 * maxError;
-        lossyData[i] = extrapolatedFloat + quantizedErr;
+            // Figure out what err would quantize to
+            float quantizedErr = round(err / (2 * maxError)) * 2 * maxError;
+            blockData[blockPos] = extrapolatedFloat + quantizedErr;
+        }
+
+        blockStart += 1024;
     }
 
     cout << "Average error: " << getAbsAverage(extrapolateErrors) << "\n";
@@ -521,7 +527,7 @@ void compressFile(const string &inputPath, const string &outputPath, const float
     // Write the compressed file
     ofstream out(outputPath, ios::binary | ios::out);
 
-    // 4 + 4 bytes to store first two data points
+    // Store block starts
     out.write(reinterpret_cast<char *>(&inputFloats[0]), sizeof(maxError));
     out.write(reinterpret_cast<char *>(&inputFloats[1]), sizeof(maxError));
 
