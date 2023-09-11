@@ -496,6 +496,9 @@ void compressFile(const string &inputPath, const string &outputPath, const float
             const float extrapolatedFloat = extrapolateNext(blockData, blockPos, extrapolationMethod);
             const float err = inputFloats[blockStart + blockPos] - extrapolatedFloat;
             extrapolateErrors.push_back(err);
+            if (err > 10.0f) {
+                int hi = 14;
+            }
 
             // Figure out what err would quantize to
             float quantizedErr = round(err / (2 * maxError)) * 2 * maxError;
@@ -529,6 +532,9 @@ void compressFile(const string &inputPath, const string &outputPath, const float
     // Write the compressed file
     ofstream out(outputPath, ios::binary | ios::out);
 
+    // 8 bytes to store n
+    out.write(reinterpret_cast<const char *>(&n), sizeof(n));
+
     // 4 bytes to store maxError
     out.write(reinterpret_cast<const char *>(&maxError), sizeof(maxError));
 
@@ -561,12 +567,14 @@ void decompressFile(const string &inputPath, const string &outputPath, const Ext
         return;
     }
 
+    long long n;
     float maxError;
     unsigned bufferSize;
     unsigned long long encodedSize;
     int numAnchors;
 
     // Read metadata
+    compressed.read(reinterpret_cast<char *>(&n), sizeof(n));
     compressed.read(reinterpret_cast<char *>(&maxError), sizeof(maxError));
     compressed.read(reinterpret_cast<char *>(&bufferSize), sizeof(bufferSize));
     compressed.read(reinterpret_cast<char *>(&encodedSize), sizeof(encodedSize));
@@ -590,6 +598,8 @@ void decompressFile(const string &inputPath, const string &outputPath, const Ext
 
     Node *deserializedTree = deserializeTree(serializedTree);
     vector<int> decodedInts = decode(encodedData, deserializedTree);
+    // Convert vector to deque
+    deque<int> bucketDeque(decodedInts.begin(), decodedInts.end());
     ofstream decodedFile(outputPath, ios::binary | ios::out);
     if (!decodedFile)
     {
@@ -597,30 +607,31 @@ void decompressFile(const string &inputPath, const string &outputPath, const Ext
         return;
     }
 
-    long long pos = 0;
-    vector<float> blockData;
-    // Reconstruction step
-    for (const int &bucket : decodedInts)
+    long long blockStart = 0;
+    while (blockStart < n)
     {
-        // Check if it's the start of a block
-        if (pos % 1024 == 0)
-        {
-            // Flush block data onto reconstructed data
-            reconstructedData.insert(reconstructedData.end(), blockData.begin(), blockData.end());
-            blockData.clear();
-            blockData.push_back(anchors[pos / 1024]);
-            ++pos;
-        }
-        // Convert the bucket number back to float
-        const float decodedErr = bucket * 2 * maxError;
+        int blockCap = min((long long)1024, n - blockStart);
+        vector<float> blockData(blockCap);
+        blockData[0] = anchors[blockStart / 1024];
 
-        // Extrapolate the new data point and adjust for error
-        const float extrapolatedFloat = extrapolateNext(blockData, pos % 1024, extrapolationMethod);
-        const float reconstructedFloat = extrapolatedFloat + decodedErr;
-        blockData.push_back(reconstructedFloat);
-        ++pos;
+        // Reconstruction step
+        for (int blockPos = 1; blockPos < blockCap; ++blockPos)
+        {
+            int bucket = bucketDeque.front();
+            bucketDeque.pop_front();
+            // Convert the bucket number back to float
+            const float decodedErr = bucket * 2 * maxError;
+
+            // Extrapolate the new data point and adjust for error
+            const float extrapolatedFloat = extrapolateNext(blockData, blockPos, extrapolationMethod);
+            const float reconstructedFloat = extrapolatedFloat + decodedErr;
+            blockData[blockPos] = reconstructedFloat;
+        }
+
+        blockStart += 1024;
+        // Flush block data onto reconstructed data
+        reconstructedData.insert(reconstructedData.end(), blockData.begin(), blockData.end());
     }
-    reconstructedData.insert(reconstructedData.end(), blockData.begin(), blockData.end());
     // Write reconstructed data to file
     for (const auto &f : reconstructedData)
     {
