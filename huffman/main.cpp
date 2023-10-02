@@ -397,25 +397,21 @@ enum ExtrapolationMethod
 
 float extrapolateNext(vector<float> &data, int index, const ExtrapolationMethod &method)
 {
-    if (method == linear)
+    if (method == none || index < 1)
     {
-        return 2 * data[index - 1] - data[index - 2];
+        return 0;
     }
-    else if (method == piecewise)
+    else if (method == piecewise || index < 2)
     {
         return data[index - 1];
     }
+    else if (method == linear || index < 3)
+    {
+        return 2 * data[index - 1] - data[index - 2];
+    }
     else if (method == quadratic)
     {
-        if (index < 3)
-        {
-            return 2 * data[index - 1] - data[index - 2];
-        }
         return data[index - 3] - 3 * data[index - 2] + 3 * data[index - 1];
-    }
-    else if (method == none)
-    {
-        return 0;
     }
     else
     {
@@ -427,16 +423,19 @@ enum ErrorMode
     absolute,
     relative
 };
-float getAbsAverage(const std::vector<float>& vec) {
-    if (vec.empty()) {
+float getAbsAverage(const std::vector<float> &vec)
+{
+    if (vec.empty())
+    {
         return 0.0f; // Handle empty vector case
     }
-    
+
     float sum = 0.0f;
-    for (float num : vec) {
+    for (float num : vec)
+    {
         sum += abs(num);
     }
-    
+
     return sum / vec.size();
 }
 
@@ -501,14 +500,17 @@ void compressFile(const string &inputPath, const string &outputPath, const float
 
     vector<int> inputInts; // Size n-2
     unordered_map<int, unsigned> freqMap;
-
+    ofstream quantizationLevels(outputPath + "-quantization-levels.txt");
     // Split into buckets of size 2 * maxError, where bucket 0 is centered at 0
     for (const auto &err : extrapolateErrors)
     {
         int bucket = round(err / (2 * maxError));
         inputInts.push_back(bucket);
         freqMap[bucket]++;
+        quantizationLevels << bucket << "\n";
     }
+    quantizationLevels.close();
+    
 
     Node *tree = generateHuffmanTree(freqMap);
     unordered_map<int, string> code = getHuffmanCode(tree);
