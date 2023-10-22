@@ -399,7 +399,7 @@ float extrapolateNext(vector<float> &data, int index, const ExtrapolationMethod 
 {
     if (method == none || index < 1)
     {
-        return 0;
+        return data[0];
     }
     else if (method == piecewise || index < 2)
     {
