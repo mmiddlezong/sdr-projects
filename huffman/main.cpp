@@ -806,12 +806,13 @@ void compressDataset(const fs::path &datasetDirectory, float maxError, const Err
 
 int main()
 {
+    
     static unordered_map<string, ErrorMode> const errorModeNames = {{"absolute", absolute}, {"relative", relative}};
     static unordered_map<string, ExtrapolationMethod> const methodNames = {{"linear", linear}, {"piecewise", piecewise}, {"none", none}, {"quadratic", quadratic}};
 
-    /* vector<fs::path> datasets = {"real-datasets/CESM-ATM", "real-datasets/EXAALT", "real-datasets/ISABEL"};
-    vector<float> errors = {1E-4, 1E-5, 1E-6};
-    vector<string> methods = {"linear", "piecewise"};
+    vector<fs::path> datasets = {"real-datasets/CESM-ATM", "real-datasets/EXAALT", "real-datasets/ISABEL"};
+    vector<float> errors = {1E-2, 1E-3, 1E-4, 1E-5, 1E-6};
+    vector<string> methods = {"none"};
 
     for (const fs::path &dataset : datasets)
     {
@@ -819,16 +820,13 @@ int main()
         {
             for (const string &method : methods)
             {
-                if (dataset == "real-datasets/CESM-ATM" && error <= 2E-6)
-                {
-                    compressDataset(dataset, error, relative, "relative", methodNames.at(method), method);
-                }
+                //compressDataset(dataset, error, relative, "relative", methodNames.at(method), method);
             }
         }
     }
 
-    return 0; */
-
+    //return 0;
+    
     // Take in inputs
     fs::path testDir;
     cout << "Enter dataset directory to test: ";
