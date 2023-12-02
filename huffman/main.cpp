@@ -193,27 +193,26 @@ Node *deserializeTree(const string &serializedTree) {
 }
 
 void writeBitsToFile(ofstream &out, const string &bits) {
-    long long fileSize = (bits.size() + 7) / 8;
+    unsigned long long fileSize = (bits.size() + 7) / 8;
     char *bytesToWrite = new char[fileSize];
 
     char byte = 0;
     int pos = 0;
-    int i = 0;
-    for (const char &c : bits) {
+    size_t byteIndex = 0;
+    for (char c : bits) {
         if (c == '1') {
             byte |= (1 << pos);
         }
-        ++pos;
-        if (pos == 8) {
-            bytesToWrite[i] = byte;
-            ++i;
+        if (++pos == 8) {
+            bytesToWrite[byteIndex++] = byte;
             byte = 0;
             pos = 0;
         }
     }
-    if (pos > 0) {
-        bytesToWrite[i] = byte;
+    if (pos > 0) { // Handle the last byte
+        bytesToWrite[byteIndex] = byte;
     }
+    
     out.write(bytesToWrite, sizeof(byte) * fileSize);
     delete[] bytesToWrite;
 }
