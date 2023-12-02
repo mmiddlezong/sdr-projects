@@ -90,7 +90,7 @@ Node *generateHuffmanTree(const unordered_map<int, unsigned> &freqMap) {
     return heap.empty() ? nullptr : heap.top();
 }
 
-string encode(const vector<int> vec, const unordered_map<int, string> &code) {
+string encode(const vector<int> &vec, const unordered_map<int, string> &code) {
     string res;
     for (const int &i : vec) {
         res += code.at(i);
