@@ -98,17 +98,6 @@ string encode(const vector<int> &vec, const unordered_map<int, string> &code) {
     return res;
 }
 
-unordered_map<string, int>
-createReverseLookup(const unordered_map<int, string> &code) {
-    unordered_map<string, int> reverseCode;
-
-    for (const auto &pair : code) {
-        reverseCode[pair.second] = pair.first;
-    }
-
-    return reverseCode;
-}
-
 vector<int> decode(const string &str, Node *huffmanTree) {
     vector<int> result;
 
