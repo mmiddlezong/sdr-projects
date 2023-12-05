@@ -23,7 +23,7 @@ Node *createNode(int value, unsigned freq);
 void generateCode(Node *cur, string path, unordered_map<int, string> &code);
 unordered_map<int, string> getHuffmanCode(Node *huffmanTree);
 Node *generateHuffmanTree(const unordered_map<int, unsigned> &freqMap);
-string encode(const vector<int> &vec, const unordered_map<int, string> &code);
+pair<vector<uint8_t>, unsigned long long> encode(const vector<int> &vec, const unordered_map<int, string> &code);
 vector<int> decode(const string &str, Node *huffmanTree);
 void traverseTree(Node *cur, string &out);
 string serializeTree(Node *tree);

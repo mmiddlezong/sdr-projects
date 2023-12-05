@@ -151,11 +151,12 @@ void compressFile(const string &inputPath, const string &outputPath,
     Node *tree = generateHuffmanTree(freqMap);
     unordered_map<int, string> code = getHuffmanCode(tree);
 
-    string encoded = encode(inputInts, code);
+    pair<vector<uint8_t>, unsigned long long> encodedRes = encode(inputInts, code);
+    vector<uint8_t> encoded = encodedRes.first;
     string buffer = serializeTree(tree);
     unsigned bufferSize =
         buffer.length(); // Get number of bits needed to store the tree
-    unsigned long long encodedSize = encoded.length();
+    unsigned long long encodedSize = encodedRes.second;
 
     // Write the compressed file
     ofstream out(outputPath, ios::binary | ios::out);
@@ -172,7 +173,8 @@ void compressFile(const string &inputPath, const string &outputPath,
     out.write(reinterpret_cast<char *>(&encodedSize), sizeof(encodedSize));
 
     writeBitsToFile(out, buffer);
-    writeBitsToFile(out, encoded);
+    //writeBitsToFile(out, encoded);
+    out.write(reinterpret_cast<const char*>(encoded.data()), encoded.size());
 
     out.close();
 }
@@ -477,7 +479,7 @@ int main() {
     } else {
         throw runtime_error("Invalid error mode");
     }
-
+    
     float maxError;
     if (errorMode == absolute) {
         std::cout << "Enter max absolute error: ";

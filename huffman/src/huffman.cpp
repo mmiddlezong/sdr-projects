@@ -63,12 +63,30 @@ Node *generateHuffmanTree(const unordered_map<int, unsigned> &freqMap) {
     return heap.empty() ? nullptr : heap.top();
 }
 
-string encode(const vector<int> &vec, const unordered_map<int, string> &code) {
-    string res;
+pair<vector<uint8_t>, unsigned long long> encode(const vector<int> &vec, const unordered_map<int, string> &code) {
+    vector<uint8_t> res;
+    uint8_t byte = 0;
+    int bitPos = 0;
+    unsigned long long totalBits = 0;
     for (const int &i : vec) {
-        res += code.at(i);
+        const string &bits = code.at(i);
+        for (const char &bit : bits) {
+            byte = (byte >> 1) | ((bit - '0') << 7);
+
+            if (++bitPos == 8) {
+                res.push_back(byte);
+                byte = 0;
+                bitPos = 0;
+            }
+        }
     }
-    return res;
+    totalBits += res.size() * 8;
+    if (bitPos > 0) {
+        res.push_back(byte >> (8 - bitPos));
+        totalBits += bitPos;
+    }
+
+    return make_pair(res, totalBits);
 }
 
 vector<int> decode(const string &str, Node *huffmanTree) {
@@ -154,29 +172,42 @@ Node *deserializeTree(const string &serializedTree) {
     return deserialize(serializedTree, i);
 }
 
+/**
+ * Writes a string of bits to a file.
+ * 
+ * @param out The output file stream to write to.
+ * @param bits The string of bits to write.
+ *
+ * @details This function writes a string of bits to a file in little-endian format.
+ *          The bits are packed into bytes, with the least significant bit (LSB) of each byte
+ *          corresponding to the first bit in the string. The last byte may not be fully filled
+ *          if the number of bits is not a multiple of 8. In this case, the remaining bits are
+ *          stored in the most significant bits (MSB) of the last byte, while the least significant
+ *          bits are set to 0.
+ */
 void writeBitsToFile(ofstream &out, const string &bits) {
-    unsigned long long fileSize = (bits.size() + 7) / 8;
-    char *bytesToWrite = new char[fileSize];
+    vector<uint8_t> res;
+    uint8_t byte = 0;
+    int bitPos = 0;
+    unsigned long long totalBits = 0;
 
-    char byte = 0;
-    int pos = 0;
-    size_t byteIndex = 0;
-    for (char c : bits) {
-        if (c == '1') {
-            byte |= (1 << pos);
-        }
-        if (++pos == 8) {
-            bytesToWrite[byteIndex++] = byte;
+    for (const char &bit : bits) {
+        byte = (byte >> 1) | ((bit - '0') << 7);
+
+        if (++bitPos == 8) {
+            res.push_back(byte);
             byte = 0;
-            pos = 0;
+            bitPos = 0;
         }
     }
-    if (pos > 0) { // Handle the last byte
-        bytesToWrite[byteIndex] = byte;
+
+    totalBits += res.size() * 8;
+    if (bitPos > 0) {
+        res.push_back(byte >> (8 - bitPos));
+        totalBits += bitPos;
     }
 
-    out.write(bytesToWrite, sizeof(byte) * fileSize);
-    delete[] bytesToWrite;
+    out.write(reinterpret_cast<const char*>(res.data()), res.size());
 }
 
 string readBitsIntoString(ifstream &file, unsigned long long bits) {
