@@ -86,7 +86,7 @@ pair<vector<uint8_t>, unsigned long long> encode(const vector<int> &vec, const u
         totalBits += bitPos;
     }
 
-    return make_pair(res, totalBits);
+    return {res, totalBits};
 }
 
 vector<int> decode(const string &str, Node *huffmanTree) {
