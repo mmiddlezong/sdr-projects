@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <stdexcept>
+#include <cmath>
 
 using namespace std;
 
@@ -10,7 +11,8 @@ enum ExtrapolationMethod {
     linear,
     piecewise,
     quadratic,
-    none
+    none,
+    regression
 };
 
 float extrapolateNext(vector<float> &data, int index, const ExtrapolationMethod &method);

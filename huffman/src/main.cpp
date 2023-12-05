@@ -434,19 +434,19 @@ void compressDataset(const fs::path &datasetDirectory, float maxError,
 }
 
 int main() {
-
     static unordered_map<string, ErrorMode> const errorModeNames = {
         {"absolute", absolute}, {"relative", relative}};
     static unordered_map<string, ExtrapolationMethod> const methodNames = {
         {"linear", linear},
         {"piecewise", piecewise},
         {"none", none},
-        {"quadratic", quadratic}};
+        {"quadratic", quadratic},
+        {"regression", regression}};
 
     vector<fs::path> datasets = {"real-datasets/CESM-ATM", "real-datasets/EXAALT",
                                  "real-datasets/ISABEL"};
     vector<float> errors = {1E-2, 1E-3, 1E-4, 1E-5, 1E-6};
-    vector<string> methods = {"none"};
+    vector<string> methods = {"none", "regression"};
 
     for (const fs::path &dataset : datasets) {
         for (const float &error : errors) {
@@ -461,12 +461,12 @@ int main() {
 
     // Take in inputs
     fs::path testDir;
-    cout << "Enter dataset directory to test: ";
-    cin >> testDir;
+    std::cout << "Enter dataset directory to test: ";
+    std::cin >> testDir;
 
-    string inputErrorMode;
-    cout << "Enter error mode (absolute, relative): ";
-    cin >> inputErrorMode;
+    std::string inputErrorMode;
+    std::cout << "Enter error mode (absolute, relative): ";
+    std::cin >> inputErrorMode;
 
     // Parse the error mode
 
@@ -480,15 +480,15 @@ int main() {
 
     float maxError;
     if (errorMode == absolute) {
-        cout << "Enter max absolute error: ";
+        std::cout << "Enter max absolute error: ";
     } else if (errorMode == relative) {
-        cout << "Enter max relative error: ";
+        std::cout << "Enter max relative error: ";
     }
-    cin >> maxError;
+    std::cin >> maxError;
 
     string inputMethod;
-    cout << "Enter extrapolation method (linear, piecewise, none, quadratic): ";
-    cin >> inputMethod;
+    std::cout << "Enter extrapolation method (linear, piecewise, none, quadratic, regression): ";
+    std::cin >> inputMethod;
 
     // Parse the extrapolation method
 
@@ -502,8 +502,8 @@ int main() {
 
     // Verify if user wants to continue
     string debugModeInput;
-    cout << "Debug mode (y/n)? ";
-    cin >> debugModeInput;
+    std::cout << "Debug mode (y/n)? ";
+    std::cin >> debugModeInput;
     bool debugMode = false;
     if (debugModeInput == "y") {
         debugMode = true;
@@ -511,8 +511,8 @@ int main() {
 
     // Verify if user wants to continue
     string inputContinue;
-    cout << "Continue (y/n)? ";
-    cin >> inputContinue;
+    std::cout << "Continue (y/n)? ";
+    std::cin >> inputContinue;
     if (inputContinue != "y") {
         return 0;
     }
